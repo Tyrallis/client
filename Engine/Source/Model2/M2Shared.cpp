@@ -359,7 +359,7 @@ int32_t CM2Shared::SetIndices() {
 
         for (uint32_t i = 0; i < this->m_skinData->m_skinSections.m_count; i++) {
             M2SkinSection* section = &this->m_skinSections[i];
-            uint32_t start = this->m_skinData->m_skinSections[i].m_indexStart;
+            uint32_t start = M2SkinSectionIndexStart(*this->m_skinData, this->m_skinData->m_skinSections[i]);
             uint16_t offset = sharedVertices ? 0 : static_cast<uint16_t>(-section->m_vertexStart);
 
             for (uint32_t instance = 0; instance < this->m_instances; instance++) {
@@ -371,7 +371,7 @@ int32_t CM2Shared::SetIndices() {
                 offset += sharedVertices ? static_cast<uint16_t>(this->m_skinData->m_vertices.m_count) : section->m_vertexCount;
             }
 
-            section->m_indexStart = static_cast<uint16_t>(indexStart);
+            M2SkinSectionSetDrawStart(*section, indexStart);
             indexStart += this->m_instances * section->m_indexCount;
         }
 
@@ -743,7 +743,9 @@ CShaderEffect* CM2Shared::GetEffect(M2Batch* batch) {
                 alphaOp = static_cast<EGxTexOp>(3);
                 break;
             default:
-                break;
+                // Packed shader ids past the three this client names (later files carry more):
+                // the original fell through to strcpy from null. No effect, as for 0.
+                return nullptr;
         }
 
         char effectName[256];
@@ -1133,6 +1135,8 @@ void CM2Shared::SubstituteSpecializedShaders() {
 // VERIFY: 6736c39f manual
 // OFFSET: 0x00837A40
 int32_t CM2Shared::InitializeSkinProfile() {
+    wxl::seam::M2::InitializeSkinProfile::Before(this);
+
     M2SkinProfile* skinData = this->m_skinData;
 
     this->m_maxInstances = skinData->m_indices.m_count ? 0x10000 / skinData->m_indices.m_count : 1;
@@ -1555,6 +1559,8 @@ int32_t M2Init(uint8_t* base, uint32_t size, M2Data& data) {
 // VERIFY: 8000b812 manual
 // OFFSET: 0x0083C6E0
 int32_t CM2Shared::FinishLoadingLowPrioritySequence(uint32_t sequenceIndex, uint8_t* buffer, uint32_t size) {
+    wxl::seam::M2::FinishLoadingLowPrioritySequence::Before(this, sequenceIndex, buffer, size);
+
     s_sequenceIndex = sequenceIndex;
     s_sequenceData = buffer;
 
@@ -1660,6 +1666,8 @@ uint32_t CM2Shared::GetSkinProfileIndex(uint32_t maxBones) {
 // VERIFY: 38f10509 manual
 // OFFSET: 0x0083CC80
 int32_t CM2Shared::Initialize() {
+    wxl::seam::M2::Initialize::Before(this);
+
     uint32_t maxBones = 256;
 
     if (this->m_cache->m_flags & 8) {
@@ -1769,9 +1777,8 @@ int32_t CM2Shared::FinishLoading() {
 // VERIFY: 77f453a0 manual
 // OFFSET: 0x0083D340
 void CM2Shared::LoadSucceededCallback(void* param) {
-    if (wxl::seam::Listening(WXL_EV_ModelLoad)) {
-        wxl::seam::M2Shared::LoadSucceededCallback::Before(param);
-    }
+    // ModelLoad's raise and wxl.m2file's read stage; each tests whether anyone listens.
+    wxl::seam::M2Shared::LoadSucceededCallback::Before(param);
 
     CM2Shared* shared = static_cast<CM2Shared*>(param);
     AsyncFileReadDestroyObject(shared->m_asyncObject);
