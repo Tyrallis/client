@@ -1268,12 +1268,14 @@ static CGObject_C* GetUpdateObject(WOWGUID guid, int32_t* reenabled) {
 
     if (object) {
         object->SetDisablePending(0);
+        wxl::seam::ObjectMgr::GetUpdateObject::After(object, guid.m_guid, reenabled);
         return object;
     }
 
     object = mgr->m_lazyCleanupObjects.Ptr(static_cast<uint32_t>(guid.m_guid), CHashKeyGUID(guid.m_guid));
 
     if (!object) {
+        wxl::seam::ObjectMgr::GetUpdateObject::After(nullptr, guid.m_guid, reenabled);
         return nullptr;
     }
 
@@ -1288,6 +1290,7 @@ static CGObject_C* GetUpdateObject(WOWGUID guid, int32_t* reenabled) {
         current->m_reenabledObjects.LinkToTail(object);
     }
 
+    wxl::seam::ObjectMgr::GetUpdateObject::After(object, guid.m_guid, reenabled);
     return object;
 }
 

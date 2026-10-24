@@ -152,6 +152,10 @@ namespace WarcraftXL::Binding {
         return ClntObjMgrGetActivePlayerObj();
     }
 
+    const void* WXL_CALL object_by_guid(uint64_t guid) {
+        return ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    }
+
     // --- object.def -----------------------------------------------------------------------------
 
     wxl_bool WXL_CALL object_position(const void* object, wxl_vec3* out) {
