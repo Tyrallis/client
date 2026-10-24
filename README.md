@@ -85,6 +85,10 @@ The client and its runtime are written to `bin/Win/`:
 | `Wow64.exe` | the client without it (`--target Wow`) |
 | `WarcraftXL.dll` | the runtime, built from `../core` as `win-x64` |
 | `XvidDecoder.dll` | the cinematic decoder |
+| `Mods/wxl.lua/` | the runtime of the Lua mods, built from `../sdk/lua`: a Lua mod needs nothing else |
+
+The first configure downloads LuaJIT, which `wxl.lua` embeds, at a fixed commit; core's README
+says how to give it one already built instead.
 
 The decompiled sources carry around a thousand warning sites of their own (narrowing conversions,
 enumerator values, unreferenced parameters); the fork does not try to silence them. The code under
@@ -102,11 +106,12 @@ Win32; the seam calls compile to nothing there.
 ## 📦 Installing
 
 1. Copy the `Data` folder of your 3.3.5a client into `bin/Win/`, so that `bin/Win/Data/` holds
-   the `.MPQ` archives, or copy `WowClient64.exe`, `WarcraftXL.dll` and `XvidDecoder.dll` into a
-   folder that already has one.
+   the `.MPQ` archives, or copy `WowClient64.exe`, `WarcraftXL.dll`, `XvidDecoder.dll` and the
+   `Mods/wxl.lua/` folder into a folder that already has one.
 2. Point `Data/<locale>/realmlist.wtf` at the server you want to connect to.
 3. Copy the mods you want into `Mods/` next to the executable, each as its own folder with a
-   `mod.json` and `bin/x64/<name>.dll`. The SDK's template builds exactly that shape.
+   `mod.json` and `bin/x64/<name>.dll`. The SDK's template builds exactly that shape. A Lua mod is
+   a folder with its `init.lua`, run by `Mods/wxl.lua/`.
 4. Start `WowClient64.exe`. The runtime's log is `Logs/WarcraftXL.log` next to it; the client's own
    logs are in the same folder.
 

@@ -3,7 +3,9 @@
 # The 64-bit client builds core's WarcraftXL.dll from the checkout beside this one, links it, and
 # calls into it from three places in its own source: WarcraftXLInit from Win64/WinMain.cpp (see
 # Init.h) and the seams' Before and After from the functions they attach to (see Seams.h). The
-# DLL lands next to the executable in bin/Win/, which is also where Mods/ and Logs/ go.
+# DLL lands next to the executable in bin/Win/, which is also where Mods/ and Logs/ go. Core also
+# builds wxl.lua, the runtime of the Lua mods, into bin/Win/Mods/wxl.lua/, so that a Lua mod runs
+# on this client with nothing else to build.
 #
 # Win32 is the configuration whose struct layouts are checked against the original binary; it
 # carries no runtime and the seam calls compile to nothing there. Only the include directories
@@ -73,6 +75,7 @@ endif ()
 # --- The runtime: core, built here as win-x64 ------------------------------------------------------
 set(WXL_CORE_ARCH "win-x64" CACHE STRING "Architecture of the core build tree" FORCE)
 set(WXL_CORE_MODS OFF CACHE BOOL "The mods core ships are win-x86 only" FORCE)
+set(WXL_CORE_LUA_MODS "${CMAKE_SOURCE_DIR}/bin/Win/Mods" CACHE PATH "Where core puts wxl.lua: the Mods/ the client scans" FORCE)
 
 # Core links the CRT statically, through CMAKE_MSVC_RUNTIME_LIBRARY. The root of this tree
 # predates the policy that makes that property count (CMP0091), so the runtime library here is
@@ -129,3 +132,8 @@ foreach (target ${WXL_SEAM_EXECUTABLES})
         target_link_libraries(${target} PRIVATE WarcraftXLClient)
     endif ()
 endforeach ()
+
+# wxl.lua comes with the runtime: building any executable builds it too, --target included.
+if (TARGET wxl-core-lua)
+    add_dependencies(WarcraftXLClient wxl-core-lua)
+endif ()
