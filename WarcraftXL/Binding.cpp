@@ -37,6 +37,7 @@
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
 #include "WoW/Source/Object/MovementShared.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
+#include "WoW/Source/Ui/ChatFrame.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/World.h"
@@ -220,6 +221,12 @@ namespace WarcraftXL::Binding {
 
     int32_t WXL_CALL login_server_type(const void* login) {
         return login ? const_cast<Login*>(static_cast<const Login*>(login))->GetLoginServerType() : -1;
+    }
+
+    // --- chat.def -------------------------------------------------------------------------------
+
+    const void* WXL_CALL chat_pending_last(void) {
+        return CGChat::s_pendingChat.Tail();
     }
 
     // --- script.def -----------------------------------------------------------------------------

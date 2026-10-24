@@ -704,7 +704,8 @@ static void SendChatEvent(ChatChannel* channel, uint32_t language, const char* t
 
 // VERIFY: 4dbf06e6 manual
 // OFFSET: 0x004FDD80
-void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t a6, const char* channelName, uint32_t lineID, const CGPlayer_C* player) {
+void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t zoneChannelID, const char* channelName, uint32_t lineID, const CGPlayer_C* player) {
+    wxl::seam::Chat::RecordChat::Before(text, type, senderName, senderGuid.m_guid, senderUnk, zoneChannelID, channelName, lineID, player);
     if (!s_chatHistoryInitialized) {
         for (uint32_t i = 0; i < sizeof(CGChat::m_chatHistory) / sizeof(CGChat::m_chatHistory[0]); i++) {
             ChatRecord* record = &CGChat::m_chatHistory[i];
@@ -735,7 +736,7 @@ void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, 
     record->m_type = type;
     record->m_senderGuid = senderGuid;
     record->m_senderUnk = senderUnk;
-    record->m_unk17B0 = a6;
+    record->m_unk17B0 = zoneChannelID;
 
     if (senderName) {
         SStrCopy(record->m_senderName, senderName, sizeof(record->m_senderName));
@@ -795,7 +796,7 @@ THROTTLEDCHAT::~THROTTLEDCHAT() {
 
 // VERIFY: f592c07c manual
 // OFFSET: 0x00502D00
-void CGChat::QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t a9, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
+void CGChat::QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t unused, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
     PENDINGCHAT* chat = CGChat::s_pendingChat.NewNode(2, 0, 0);
 
     chat->m_senderGuid = senderGuid;
@@ -806,7 +807,7 @@ void CGChat::QueueChatText(const char* text, int32_t type, const char* senderNam
     chat->m_targetName = targetName ? SStrDupA(targetName, __FILE__, __LINE__) : nullptr;
     chat->m_language = language;
     chat->m_queued = queued;
-    chat->unused_0030 = a9;
+    chat->unused_0030 = unused;
     chat->m_achievementID = achievementID;
     chat->m_isGM = isGM;
     chat->m_conversation = conversation ? new (SMemAlloc(sizeof(ChatConversation), __FILE__, __LINE__, 0)) ChatConversation(*conversation) : nullptr;
@@ -824,6 +825,8 @@ void CGChat::QueueChatText(const char* text, int32_t type, const char* senderNam
     } else {
         chat->m_flags[0] = 0;
     }
+
+    wxl::seam::Chat::QueueChatText::After(text, type, senderName, targetName, language, channelName, flags, queued, unused, senderGuid.m_guid, senderUnk, targetGuid.m_guid, achievementID, isGM, conversation);
 }
 
 // VERIFY: 5382bfae auto
@@ -3454,6 +3457,7 @@ const char* CGChat::GetChannelStringForDisplay(int32_t session, int32_t* type) {
 // VERIFY: 5db308f7 manual
 // OFFSET: 0x00501710
 PENDINGCHAT::~PENDINGCHAT() {
+    wxl::seam::Chat::DestroyPendingChat::Before(this);
     if (this->m_text) {
         SMemFree(this->m_text, __FILE__, __LINE__, 0);
     }
