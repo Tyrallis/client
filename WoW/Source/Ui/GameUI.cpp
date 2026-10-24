@@ -2320,6 +2320,7 @@ int32_t CGGameUI::OnSpriteRightClick(WOWGUID guid) {
 // VERIFY: a9387b84 auto
 // OFFSET: 0x00527830
 int32_t CGGameUI::HandleTerrainClick(const CTerrainClickEvent& evt) {
+    wxl::seam::GameUI::HandleTerrainClick::Before(&evt);
     if (evt.m_button == MOUSE_BUTTON_RIGHT || CGGameUI::m_cursorVirtualID) {
         CGGameUI::ClearCursor(1, 1);
     }
@@ -2331,6 +2332,7 @@ int32_t CGGameUI::HandleTerrainClick(const CTerrainClickEvent& evt) {
 // VERIFY: cdcd662a auto
 // OFFSET: 0x00527870
 int32_t CGGameUI::HandleSpriteClick(const CSpriteClickEvent& evt) {
+    wxl::seam::GameUI::HandleSpriteClick::Before(&evt);
     if (CGGameUI::m_cursorVirtualID) {
         CGGameUI::ClearCursor(1, 1);
     }
@@ -2549,6 +2551,7 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
 // VERIFY: efbc912f manual
 // OFFSET: 0x0051F790
 void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
+    wxl::seam::GameUI::HandleObjectTrackChange::Before(guid.m_guid, prevGuid.m_guid);
     CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
@@ -4145,6 +4148,7 @@ bool CGGameUI::CanInspect(CGUnit_C* unit) {
 // VERIFY: 1417860a manual
 // OFFSET: 0x005204C0
 void CGGameUI::NewZoneFeedback(int32_t areaId, int32_t subzoneId, int32_t wmoGroupId, const char* zoneText, const char* subZoneText, const char* realZoneText, int32_t inside) {
+    wxl::seam::GameUI::NewZoneFeedback::Before(areaId, subzoneId, wmoGroupId, zoneText, subZoneText, realZoneText, inside);
     int32_t newArea = CGGameUI::m_areaID != areaId;
     int32_t hadArea = CGGameUI::m_areaID != 0;
     CGGameUI::m_areaID = areaId;

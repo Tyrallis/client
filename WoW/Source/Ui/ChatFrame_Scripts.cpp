@@ -1,4 +1,5 @@
 #include "ChatFrame.h"
+#include "WarcraftXL/Seams.h"
 #include <cstdint>
 #include "Engine/Source/lua-5.1/src/lua.h"
 #include "Engine/Source/Base/CDataStore.h"
@@ -41,6 +42,11 @@ static const char* s_channelCategories[3] = { "CHANNEL_CATEGORY_GROUP", "CHANNEL
 // VERIFY: 3ea62573 manual
 // OFFSET: 0x0050D170
 static int32_t Script_SendChatMessage(lua_State* L) {
+    int32_t gated = 0;
+    void* wxlState = L;
+    if (wxl::seam::Chat::Script_SendChatMessage::Gate(&gated, &wxlState)) {
+        return gated;
+    }
     if (!CGGameUI::CanPerformAction(10)) {
         return 0;
     }
@@ -856,6 +862,11 @@ static int32_t Script_DeclineInvite(lua_State* L) {
 // VERIFY: 96bea800 manual
 // OFFSET: 0x00500560
 static int32_t Script_SendAddonMessage(lua_State* L) {
+    int32_t gated = 0;
+    void* wxlState = L;
+    if (wxl::seam::Chat::Script_SendAddonMessage::Gate(&gated, &wxlState)) {
+        return gated;
+    }
     if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }

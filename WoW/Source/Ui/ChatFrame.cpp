@@ -1,4 +1,5 @@
 #include "ChatFrame.h"
+#include "WarcraftXL/Seams.h"
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -1033,6 +1034,7 @@ bool SpamFilter(char* text, bool cache) {
 // VERIFY: 812184e4 manual
 // OFFSET: 0x00509DD0
 void CGChat::AddChatMessage(const char* text, int32_t type, const char* senderName, uint32_t language, const char* channelName, const char* targetName, const char* flags, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
+    wxl::seam::Chat::AddChatMessage::Before(text, type, senderName, language, channelName, targetName, flags, senderGuid.m_guid, senderUnk, targetGuid.m_guid, achievementID, isGM, conversation);
     if (type >= CHAT_MSG_MAX) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
@@ -1483,6 +1485,7 @@ emoteDone:
 // VERIFY: 71191980 manual
 // OFFSET: 0x0050BE70
 int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
+    wxl::seam::Chat::ChatMessageReceived::Before(msg, isGM);
     char channelName[128];
     memset(channelName, 0, sizeof(channelName));
 
@@ -1532,6 +1535,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             msg->Get(chatTag);
 
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(targetGuid, true)) {
+                wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                 return 1;
             }
 
@@ -1549,6 +1553,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             msg->Get(chatTag);
 
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(senderGuid, true)) {
+                wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                 return 1;
             }
 
@@ -1621,6 +1626,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             if ((type == CHAT_MSG_WHISPER || type == CHAT_MSG_BATTLENET) && (chatTag & 0x8) && !(chatTag & 0x4) && language != 0xFFFFFFFF) {
                 if ((!player || senderGuid != player->m_obj->m_guid) && (!FriendList::s_friendList || !FriendList::s_friendList->IsFriend(senderGuid)) && !CGChat::IsInWhisperHistory(senderGuid)) {
                     CGChat::SendIgnoredResponse(senderGuid, 1);
+                    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                     return 1;
                 }
             }
@@ -1628,6 +1634,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(senderGuid, true) && !(chatTag & 0x4)) {
                 if (type == CHAT_MSG_WHISPER) {
                     if (language == 0xFFFFFFFF) {
+                        wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                         return 1;
                     }
 
@@ -1635,6 +1642,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
                 }
 
                 if (type != CHAT_MSG_WHISPER_INFORM && type != CHAT_MSG_IGNORED && type != CHAT_MSG_RESTRICTED) {
+                    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                     return 1;
                 }
             }
@@ -1645,10 +1653,12 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
 
     if (!msg->IsRead()) {
         msg->Reset();
+        wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
         return 1;
     }
 
     CGChat::AddChatMessage(text, type, senderName, language, channelName, targetName, flags, senderGuid, senderUnk, targetGuid, achievementID, isGM, nullptr);
+    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
     return 1;
 }
 
@@ -3098,6 +3108,7 @@ void CGChat::LogXPGain(CGUnit_C* unit, int32_t amount, int32_t type, int32_t bon
 // VERIFY: 294836e5 manual
 // OFFSET: 0x0050C720
 int32_t Packet_SMSG_LOG_XPGAIN(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Chat::Packet_SMSG_LOG_XPGAIN::Before(param, msgId, time, msg);
     WOWGUID guid = WOWGUID();
     msg->Get(guid.m_guid);
     uint32_t amount = 0;

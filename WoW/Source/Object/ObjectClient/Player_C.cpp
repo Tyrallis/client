@@ -9004,6 +9004,7 @@ static void RandomRollNameQueryCallback(int32_t id, const WOWGUID& guid, void* p
 // VERIFY: 7e47e286 manual
 // OFFSET: 0x006E2E90
 int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Player::Packet_Group_9::Before(param, msgId, time, msg);
     if (!msg) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
@@ -12229,6 +12230,7 @@ int32_t ReportDailyQuestsRemaining(WOWGUID guid, uint32_t offset, uint32_t count
 // VERIFY: 8b4afe19 manual
 // OFFSET: 0x006DA070
 int32_t OnUpdateMoney(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
+    wxl::seam::Player::OnUpdateMoney::Before(guid.m_guid, offset, count, value, param);
     SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
     CGClassTrainer::RefreshList();
     FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_MONEY, nullptr);

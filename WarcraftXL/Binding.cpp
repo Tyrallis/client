@@ -7,6 +7,7 @@
 
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
+#include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
 #include "Engine/Source/Gx/Gx.h"
@@ -31,7 +32,10 @@
 #include "WoW/Source/Object/ObjectClient/VisibleItem_C.h"
 #include "WoW/Source/Object/Player.h"
 #include "WoW/Source/Object/Unit.h"
+#include "WoW/Source/Glue/CGlueMgr.h"
+#include "WoW/Source/WowServices/Login.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
+#include "WoW/Source/Object/MovementShared.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
@@ -206,6 +210,16 @@ namespace WarcraftXL::Binding {
 
     uint8_t WXL_CALL ui_logging_in(void) {
         return CGGameUI::m_loggingIn;
+    }
+
+    // --- glue.def -------------------------------------------------------------------------------
+
+    const char* WXL_CALL glue_current_screen(void) {
+        return CGlueMgr::m_currentScreen;
+    }
+
+    int32_t WXL_CALL login_server_type(const void* login) {
+        return login ? const_cast<Login*>(static_cast<const Login*>(login))->GetLoginServerType() : -1;
     }
 
     // --- script.def -----------------------------------------------------------------------------

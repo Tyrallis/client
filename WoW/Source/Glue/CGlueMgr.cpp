@@ -1,4 +1,5 @@
 #include "CGlueMgr.h"
+#include "WarcraftXL/Seams.h"
 #include <cmath>
 #include <cstdarg>
 #include <cstring>
@@ -823,6 +824,7 @@ void CGlueMgr::SetScreen(const char* screen) {
 // VERIFY: d3e9c694 manual
 // OFFSET: 0x004D82C0
 void CGlueMgr::UpdateCurrentScreen(const char* screen) {
+    wxl::seam::Glue::UpdateCurrentScreen::Before(screen);
     if (!SStrCmpI(CGlueMgr::m_currentScreen, "charselect", STORM_MAX_STR)) {
         CCharacterSelection::OnHide();
     } else if (!SStrCmpI(CGlueMgr::m_currentScreen, "charcreate", STORM_MAX_STR)) {

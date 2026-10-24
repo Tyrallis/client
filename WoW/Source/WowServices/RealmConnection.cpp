@@ -1,4 +1,5 @@
 #include "RealmConnection.h"
+#include "WarcraftXL/Seams.h"
 #include "Engine/Source/BlizzardCore/Source/Packages/Util/SHA1.h"
 #include "Engine/Source/Os/TimeManager.h"
 #include "Engine/Source/Storm/H/storm.h"
@@ -22,6 +23,7 @@ RealmConnection::REALMCONNECTIONNODE::REALMCONNECTIONNODE() {
 // VERIFY: ec31eb67 manual
 // OFFSET: 0x00464C10
 int32_t RealmConnection::HandleCharEnum(uint32_t msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::RealmConnection::HandleCharEnum::Before(this, msgId, time, msg);
     if (this->m_realmResponse) {
         this->m_realmResponse->GameServerResult(this, "SMSG_CHAR_ENUM", nullptr, nullptr);
     }
@@ -270,6 +272,7 @@ void RealmConnection::SetSelectedRealm(uint32_t regionId, uint32_t battlegroupId
 // VERIFY: b87ab906 auto
 // OFFSET: 0x00464640
 int32_t RealmConnection::HandleAuthResponse(uint32_t msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::RealmConnection::HandleAuthResponse::Before(this, msgId, time, msg);
     if (this->m_realmResponse) {
         this->m_realmResponse->GameServerResult(this, "SMSG_AUTH_RESPONSE", nullptr, nullptr);
     }
@@ -408,6 +411,7 @@ void RealmConnection::RequestCharacterEnum() {
 // VERIFY: 490618f4 manual
 // OFFSET: 0x00464AB0
 void RealmConnection::RequestCharacterLogin(WOWGUID guid, int32_t a2) {
+    wxl::seam::RealmConnection::RequestCharacterLogin::Before(this, guid.m_guid, a2);
     CDataStore msg;
     msg.Put(static_cast<uint32_t>(CMSG_PLAYER_LOGIN));
     msg.Put(guid.m_guid);

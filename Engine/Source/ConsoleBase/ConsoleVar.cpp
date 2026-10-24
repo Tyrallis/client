@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstring>
+#include "WarcraftXL/Seams.h"
 #include <malloc.h>
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
@@ -344,6 +345,7 @@ void CVarIntListWrapper::AddNextValue(uint32_t value) {
 // VERIFY: d7f3e424 manual
 // OFFSET: 0x007667B0
 void CVar::InternalSet(const char* value, bool setValue, bool setReset, bool setDefault, bool setNeedsSave) {
+    wxl::seam::ConsoleVar::InternalSet::Before(this, value, setValue, setReset, setDefault, setNeedsSave);
     bool changed = false;
 
     if ((this->m_flags & 0x4) || !value) {

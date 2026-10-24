@@ -1973,6 +1973,7 @@ int32_t CombatLog::HandleSpellHealLog(CDataStore* msg, int32_t timeOffset) {
 // VERIFY: c6dd3152 manual
 // OFFSET: 0x006D3DF0
 int32_t CombatLog::HandleSpellLogEnergizeLog(CDataStore* msg, int32_t timeOffset) {
+    wxl::seam::Combat::HandleSpellLogEnergizeLog::Before(msg, timeOffset);
     SmartGUID target;
     SmartGUID caster;
     *msg >> target;

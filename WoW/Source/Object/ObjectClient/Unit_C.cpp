@@ -11015,6 +11015,7 @@ int32_t CGUnit_C::BuildMovementUpdate(uint32_t time, uint32_t msgId, CDataStore*
 // VERIFY: fbc23c4e manual
 // OFFSET: 0x0071F0C0
 int32_t CGUnit_C::SendMovementUpdate(uint32_t time, uint32_t msgId, float value, uint32_t index, uint64_t transport, uint8_t seat) {
+    wxl::seam::Unit::SendMovementUpdate::Before(this, time, msgId, value, index, transport, seat);
     CDataStore msg;
     this->m_lastSentFacing = this->GetRawFacing();
 
