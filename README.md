@@ -185,7 +185,7 @@ NOTICE.md                provenance and what is, and is not, licensed
 ## 📄 License
 
 This tree is a decompilation and carries no license; [NOTICE.md](NOTICE.md) says why and what that
-implies. The runtime it links is [WarcraftXL core](https://github.com/WarcraftXL/core), GPLv3; the
+implies. The runtime it links is [WarcraftXL core](https://github.com/WarcraftXL/core), MIT; the
 contract mods are written against is [WarcraftXL sdk](https://github.com/WarcraftXL/sdk), MIT.
 
 <div align="center">
