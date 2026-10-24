@@ -36,6 +36,7 @@ if (Python3_Interpreter_FOUND)
         COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/seams/check_seams.py"
                 --seams "${WXL_CORE_DIR}/include/wxl/seams"
                 --client "${CMAKE_SOURCE_DIR}"
+                --contract "${WXL_SDK_DIR}/include/wxl/events.def"
         COMMENT "Checking the seam table against the fork's call sites"
         VERBATIM)
     add_dependencies(WorldClient wxl-seam-check)
