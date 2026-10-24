@@ -42,6 +42,30 @@ if (Python3_Interpreter_FOUND)
         COMMENT "Checking the seam table against the fork's call sites"
         VERBATIM)
     add_dependencies(WorldClient wxl-seam-check)
+
+    # The SDK's update-field table is generated from this fork's field descriptors, descriptor
+    # blocks and mirror lists. generate_update_fields.py --check measures the blocks with clang-cl
+    # and fails when the table is not what the fork gives, so a pull that moves a field is caught
+    # here. Without clang-cl the check is left out (Binding.cpp still holds the block sizes).
+    if (CMAKE_CXX_COMPILER MATCHES "clang-cl")
+        set(WXL_FIELDS_CLANG_CL "${CMAKE_CXX_COMPILER}")
+    else ()
+        find_program(WXL_FIELDS_CLANG_CL NAMES clang-cl)
+    endif ()
+    if (WXL_FIELDS_CLANG_CL)
+        add_custom_target(wxl-fields-check
+            COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/fields/generate_update_fields.py"
+                    --check --quiet
+                    --client "${CMAKE_SOURCE_DIR}"
+                    --out "${WXL_SDK_DIR}/include/wxl/update_fields.def"
+                    --clang-cl "${WXL_FIELDS_CLANG_CL}"
+            COMMENT "Checking the SDK's update-field table against the fork"
+            VERBATIM)
+        add_dependencies(WorldClient wxl-fields-check)
+    else ()
+        message(STATUS "clang-cl was not found, so the update-field table is not checked against "
+            "the fork in this build; run core/tools/fields/generate_update_fields.py --check by hand.")
+    endif ()
 else ()
     message(WARNING "Python 3 was not found, so the seam wiring check will not run in this build. "
         "A dropped seam call site would go unnoticed; run core/tools/seams/check_seams.py by hand.")

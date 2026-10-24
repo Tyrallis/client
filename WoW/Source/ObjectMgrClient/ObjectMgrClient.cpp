@@ -857,6 +857,7 @@ void ClntObjMgrInitializeShared() {
 
     MirrorInitialize();
     ConsoleCommandRegister("ObjUsage", CCommand_ObjUsage, CATEGORY_GAME, nullptr);
+    wxl::seam::ObjectMgr::InitializeShared::After();
 }
 
 // VERIFY: 6d6f17bf manual
@@ -1130,6 +1131,7 @@ void ClntObjMgrUnsetObjMirrorHandler(WOWGUID guid, OBJECT_TYPE_ID typeId, uint32
 // VERIFY: 8be6328a manual
 // OFFSET: 0x004D5C80
 void ClntObjMgrDestroyShared() {
+    wxl::seam::ObjectMgr::DestroyShared::Before();
     for (uint32_t typeId = 0; typeId < NUM_CLIENT_OBJECT_TYPES; typeId++) {
         for (uint32_t i = 0; i < 1326; i++) {
             TSList<CMirrorHandler, TSGetLink<CMirrorHandler> >* list = &s_typeMirrorHandlers[typeId][i];

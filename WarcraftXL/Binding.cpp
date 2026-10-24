@@ -42,7 +42,33 @@
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "wxl/events.h"
+#include "wxl/objects/fields.hpp"
 #include "wxl/services/script.h"
+
+// The SDK's update-field table describes these blocks: each kind's fields end where the client's
+// descriptor block for it does, and a player other than the active one keeps CGPlayerData only.
+// core/tools/fields/generate_update_fields.py writes the table from this fork and checks it
+// whole; these hold its block sizes to the structs this build compiles.
+#define WXL_UPDATE_FIELD(kind, NAME, Name, index, size, value, flags, watch)
+#define WXL_UPDATE_FIELD_KIND(kind, type, parent, first, end, others_end) \
+    constexpr uint32_t kFieldsOf##kind[3] = { first, end, others_end };
+#include "wxl/update_fields.def"
+#undef WXL_UPDATE_FIELD_KIND
+#undef WXL_UPDATE_FIELD
+static_assert(sizeof(CGObjectData) == (kFieldsOfObject[1] - kFieldsOfObject[0]) * 4, "CGObjectData");
+static_assert(sizeof(CGItemData) == (kFieldsOfItem[1] - kFieldsOfItem[0]) * 4, "CGItemData");
+static_assert(sizeof(CGContainerData) == (kFieldsOfContainer[1] - kFieldsOfContainer[0]) * 4, "CGContainerData");
+static_assert(sizeof(CGUnitData) == (kFieldsOfUnit[1] - kFieldsOfUnit[0]) * 4, "CGUnitData");
+static_assert(sizeof(CGPlayerLocalData) == (kFieldsOfPlayer[1] - kFieldsOfPlayer[0]) * 4, "CGPlayerLocalData");
+static_assert(sizeof(CGPlayerData) == (kFieldsOfPlayer[2] - kFieldsOfPlayer[0]) * 4, "CGPlayerData");
+static_assert(sizeof(CGGameObjectData) == (kFieldsOfGameObject[1] - kFieldsOfGameObject[0]) * 4, "CGGameObjectData");
+static_assert(sizeof(CGDynamicObjectData) == (kFieldsOfDynamicObject[1] - kFieldsOfDynamicObject[0]) * 4,
+              "CGDynamicObjectData");
+static_assert(sizeof(CGCorpseData) == (kFieldsOfCorpse[1] - kFieldsOfCorpse[0]) * 4, "CGCorpseData");
+static_assert(offsetof(CGUnitData, m_unitFieldHealth) == (wxl::field::Unit::Health.index - kFieldsOfUnit[0]) * 4 &&
+                  offsetof(CGPlayerData, m_playerChosenTitle) ==
+                      (wxl::field::Player::ChosenTitle.index - kFieldsOfPlayer[0]) * 4,
+              "UNIT_FIELD_HEALTH and PLAYER_CHOSEN_TITLE where update_fields.def puts them");
 
 // The contract numbers object types exactly as the client does, so a type id crosses as is.
 static_assert(ID_OBJECT == WXL_OBJECT_UNKNOWN && ID_ITEM == WXL_OBJECT_ITEM && ID_CONTAINER == WXL_OBJECT_CONTAINER
@@ -75,6 +101,22 @@ namespace {
 
     lua_State* State(void* state) {
         return static_cast<lua_State*>(state);
+    }
+
+    // The runtime's mirror handler, called from the client's own MIRRORHANDLERFUNC: the guid
+    // crosses as its 64 bits. The runtime sets one handler for every field it watches.
+    wxl_core_mirror_fn s_mirror = nullptr;
+
+    int32_t ForwardMirror(WOWGUID guid, uint32_t offset, uint32_t size, const void* oldValue, void* param) {
+        return s_mirror ? s_mirror(guid.m_guid, offset, size, oldValue, param) : 0;
+    }
+
+    bool TakeMirror(wxl_core_mirror_fn handler) {
+        if (!handler || (s_mirror && s_mirror != handler)) {
+            return false;
+        }
+        s_mirror = handler;
+        return true;
     }
 
     // A member as a binding row answers it: a guid as its 64 bits, a byte array as the integer it
@@ -154,6 +196,26 @@ namespace WarcraftXL::Binding {
 
     const void* WXL_CALL object_by_guid(uint64_t guid) {
         return ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    }
+
+    wxl_bool WXL_CALL object_watch_type(uint32_t type, uint32_t offset, uint32_t size, wxl_core_mirror_fn handler,
+                                        void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !TakeMirror(handler)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrSetTypeMirrorHandler(static_cast<OBJECT_TYPE_ID>(type), offset, size, &ForwardMirror, param,
+                                       static_cast<HANDLER_PRIORITY>(0), 0);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL object_watch_one(uint64_t guid, uint32_t type, uint32_t offset, uint32_t size,
+                                       wxl_core_mirror_fn handler, void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !object_by_guid(guid) || !TakeMirror(handler)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrSetObjMirrorHandler(WOWGUID{ guid }, static_cast<OBJECT_TYPE_ID>(type), offset, size, &ForwardMirror,
+                                      param, static_cast<HANDLER_PRIORITY>(0), 0);
+        return WXL_TRUE;
     }
 
     // --- object.def -----------------------------------------------------------------------------
