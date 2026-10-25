@@ -230,6 +230,11 @@ namespace WarcraftXL::Binding {
         return World::QueryMapId();
     }
 
+    wxl_bool WXL_CALL world_position(wxl_vec3* out) {
+        if (!out || World::QueryMapId() < 0) return WXL_FALSE;
+        return Give(out, World::s_currentWorldPos);
+    }
+
     // --- objectmgr.def --------------------------------------------------------------------------
 
     const void* WXL_CALL local_player_object(void) {
@@ -337,6 +342,10 @@ namespace WarcraftXL::Binding {
 
     uint8_t WXL_CALL ui_logging_in(void) {
         return CGGameUI::m_loggingIn;
+    }
+
+    uint8_t WXL_CALL ui_reloading(void) {
+        return CGGameUI::m_currentlyReloadingUI;
     }
 
     // --- glue.def -------------------------------------------------------------------------------

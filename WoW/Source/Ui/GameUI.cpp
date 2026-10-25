@@ -3687,6 +3687,7 @@ void CGGameUI::BeginCinematicInternal(void* param) {
 // OFFSET: 0x00528010
 void CGGameUI::EnterWorld() {
     if (CGGameUI::s_inWorld) {
+        wxl::seam::World::EnterWorld::After();
         return;
     }
 
@@ -3831,6 +3832,7 @@ void CGGameUI::EnterWorld() {
     msg.Put(static_cast<uint8_t>(microphone != 0));
     msg.Finalize();
     ClientServices::Send2(&msg);
+    wxl::seam::World::EnterWorld::After();
 }
 
 // VERIFY: 719a57ef auto
@@ -8129,6 +8131,8 @@ void CCapturePointUIManager::DeleteNode(CapturePointUIManagerNode* node) {
 // VERIFY: 1c2e47fb auto
 // OFFSET: 0x00528C30
 void CGGameUI::LeaveWorld() {
+    wxl::seam::World::LeaveWorld::Before();
+
     if (!CGGameUI::s_inWorld) {
         return;
     }
