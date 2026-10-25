@@ -743,8 +743,8 @@ CShaderEffect* CM2Shared::GetEffect(M2Batch* batch) {
                 alphaOp = static_cast<EGxTexOp>(3);
                 break;
             default:
-                // Packed shader ids past the three this client names (later files carry more):
-                // the original fell through to strcpy from null. No effect, as for 0.
+                // A packed shader id past the three named here (later model files carry more)
+                // names no shaders: no effect, as for 0.
                 return nullptr;
         }
 
@@ -1135,7 +1135,9 @@ void CM2Shared::SubstituteSpecializedShaders() {
 // VERIFY: 6736c39f manual
 // OFFSET: 0x00837A40
 int32_t CM2Shared::InitializeSkinProfile() {
-    wxl::seam::M2::InitializeSkinProfile::Before(this);
+    if (wxl::seam::Listening(WXL_EV_SkinProfileParsed)) {
+        wxl::seam::M2Shared::InitializeSkinProfile::Before(this);
+    }
 
     M2SkinProfile* skinData = this->m_skinData;
 
@@ -1559,7 +1561,9 @@ int32_t M2Init(uint8_t* base, uint32_t size, M2Data& data) {
 // VERIFY: 8000b812 manual
 // OFFSET: 0x0083C6E0
 int32_t CM2Shared::FinishLoadingLowPrioritySequence(uint32_t sequenceIndex, uint8_t* buffer, uint32_t size) {
-    wxl::seam::M2::FinishLoadingLowPrioritySequence::Before(this, sequenceIndex, buffer, size);
+    if (wxl::seam::Listening(WXL_EV_ModelSequenceLoad)) {
+        wxl::seam::M2Shared::FinishLoadingLowPrioritySequence::Before(this, sequenceIndex, buffer, size);
+    }
 
     s_sequenceIndex = sequenceIndex;
     s_sequenceData = buffer;
@@ -1666,7 +1670,9 @@ uint32_t CM2Shared::GetSkinProfileIndex(uint32_t maxBones) {
 // VERIFY: 38f10509 manual
 // OFFSET: 0x0083CC80
 int32_t CM2Shared::Initialize() {
-    wxl::seam::M2::Initialize::Before(this);
+    if (wxl::seam::Listening(WXL_EV_ModelParsed)) {
+        wxl::seam::M2Shared::Initialize::Before(this);
+    }
 
     uint32_t maxBones = 256;
 
@@ -1777,8 +1783,9 @@ int32_t CM2Shared::FinishLoading() {
 // VERIFY: 77f453a0 manual
 // OFFSET: 0x0083D340
 void CM2Shared::LoadSucceededCallback(void* param) {
-    // ModelLoad's raise and wxl.m2file's read stage; each tests whether anyone listens.
-    wxl::seam::M2Shared::LoadSucceededCallback::Before(param);
+    if (wxl::seam::Listening(WXL_EV_ModelLoad)) {
+        wxl::seam::M2Shared::LoadSucceededCallback::Before(param);
+    }
 
     CM2Shared* shared = static_cast<CM2Shared*>(param);
     AsyncFileReadDestroyObject(shared->m_asyncObject);

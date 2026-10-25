@@ -113,7 +113,7 @@ static void (*s_drawListPreprocess[GxuSorts_Last])(GxDrawListEntry*, const C3Vec
 // STATIC: 0x00AD88B0
 static int (*s_drawListSorters[GxuSorts_Last])(const void*, const void*) = { DrawListSorterB2F, DrawListSorterVtxStream };
 
-// WarcraftXL: see Gx.h.
+// The last indexed draw a D3D9 device issued (Gx.h).
 GxD3dIndexedDraw g_gxLastIndexedDraw = {};
 
 // VERIFY: 0b88acbc auto

@@ -3700,7 +3700,9 @@ inline ITEM_SLOT CCharacterComponent::GetItemSlotForInvSlot(INVENTORY_SLOTS invS
 // VERIFY: d14b01cc manual
 // OFFSET: 0x004EE460
 void CCharacterComponent::RemoveItem(ITEM_SLOT itemSlot) {
-    wxl::seam::Component::RemoveItem::Before(this, itemSlot);
+    if (wxl::seam::Listening(WXL_EV_AppearanceChanged)) {
+        wxl::seam::Component::RemoveItem::Before(this, itemSlot);
+    }
 
     if (!this->m_itemDisplayID[itemSlot]) {
         return;
@@ -5162,7 +5164,9 @@ bool CCharacterComponent::RenderPrep(int32_t wait) {
 // VERIFY: 3d69252b auto
 // OFFSET: 0x004F16C0
 void CCharacterComponent::FreeComponent(CCharacterComponent* component) {
-    wxl::seam::Component::FreeComponent::Before(component);
+    if (wxl::seam::Listening(WXL_EV_AppearanceChanged)) {
+        wxl::seam::Component::FreeComponent::Before(component);
+    }
 
     uint32_t* heap = s_componentHeap;
     component->~CCharacterComponent();
@@ -5623,7 +5627,9 @@ void CCharacterComponent::AddItem(ITEM_SLOT itemSlot, const ItemDisplayInfoRec* 
             break;
     }
 
-    wxl::seam::Component::AddItem::After(this, itemSlot, displayRec, itemVisual);
+    if (wxl::seam::Listening(WXL_EV_AppearanceChanged)) {
+        wxl::seam::Component::AddItem::After(this, itemSlot, displayRec, itemVisual);
+    }
 }
 
 // VERIFY: 1692162c auto

@@ -491,7 +491,9 @@ void CM2SceneRender::DrawBatch() {
         g_theGxDevicePtr->Draw(&batch, 1);
     }
 
-    wxl::seam::M2::DrawBatch::After(this);
+    if (wxl::seam::Listening(WXL_EV_ModelBatchDrawn)) {
+        wxl::seam::M2::DrawBatch::After(this);
+    }
 }
 
 // VERIFY: eebe62d2 manual

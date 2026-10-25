@@ -386,13 +386,13 @@ inline void M2Array<T>::Set(const T* data) {
     this->m_offset = data ? static_cast<uint32_t>(reinterpret_cast<uintptr_t>(data) - reinterpret_cast<uintptr_t>(this)) : 0;
 }
 
-// WIDE SKIN INDICES (not in the original client)
+// WIDE SKIN INDICES
 //
 // A submesh's first index is a 16-bit field, so a skin of more than 65535 indices cannot say where
 // a submesh past that begins on its own. Later skins give the high half in the top 16 bits of the
-// section's id ("level"), which the 3.3.5 files used as an occasional LOD marker. The high half is
+// section's id ("level"), which the 3.3.5 files use as an occasional LOD marker. The high half is
 // taken only when the window it names lies inside the skin's own index array: a marker names one it
-// cannot contain, and the 16-bit start stands, so a stock skin reads exactly as before.
+// cannot contain, and the 16-bit start stands, so a skin of 65535 indices or fewer reads as it is.
 inline uint32_t M2SkinSectionIndexStart(const M2SkinProfile& skin, const M2SkinSection& section) {
     uint32_t wide = (section.m_skinSectionId & 0xFFFF0000u) | section.m_indexStart;
     uint32_t count = skin.m_indices.m_count;

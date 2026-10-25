@@ -5034,7 +5034,6 @@ void CM2Model::GetCollisionFacets(const CAaBox& box, const C44Matrix& transform,
     }
 }
 
-
 // VERIFY: d48ec2da manual
 // OFFSET: 0x0082F0F0
 void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C3Vector& emissive, float alpha, float alpha2) {
@@ -7786,8 +7785,8 @@ int32_t CM2Model::Initialize(CM2Scene* scene, CM2Shared* shared, CM2Model* sourc
             CM2Model* copy = this->m_scene->DuplicateModel(child, 0);
 
             if (copy) {
-                // WarcraftXL: a child attached to the root (0x40000) stays attached to the root,
-                // or a copy of a parent without that point would drop it.
+                // A child attached to the root (0x40000) stays attached to the root: a copy of a
+                // parent without that point would drop it otherwise.
                 copy->AttachToParent(this, child->m_attachmentId, nullptr, (child->m_fFlags & 0x40000) ? 1 : 0);
 
                 if (copy->m_refCount-- == 1) {

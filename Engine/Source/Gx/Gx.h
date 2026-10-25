@@ -148,8 +148,8 @@ uint32_t GxCalcTexelStrideInBytes(EGxTexFormat format, uint32_t width);
 uint32_t GxVertexAttribOffset(EGxVertexBufferFormat format, EGxVertexAttrib attrib);
 uint32_t GxVertexSize(EGxVertexBufferFormat format);
 
-// WarcraftXL: the numbers of the last indexed draw a D3D9 device issued, so that wxl.gx can hand
-// them to a mod that issues the same draw again. serial counts the draws.
+// The numbers of the last indexed draw a D3D9 device issued, which the runtime hands a mod as
+// ModelBatchDrawn so that it can issue the same draw again. serial counts the draws.
 struct GxD3dIndexedDraw {
     uint32_t primType;
     int32_t baseVertex;

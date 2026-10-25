@@ -99,8 +99,8 @@ static int32_t s_gxTexCacheMaxSize;
 static uint32_t s_asyncLoadBufferUsed;
 
 // The edge of the largest image the shared decode scratch (s_mipBits) holds, and so of the largest
-// mip a texture loads at: the original sized the scratch for 1024 and nothing kept a larger image
-// out of it, so a 2048 file overran it (later models ship 2048 textures). Not in the original.
+// mip a texture loads at: a texture is never decoded larger than the scratch, so a 2048 file (later
+// models ship them) loads whole instead of overrunning it.
 static const uint32_t s_maxImageSize = 2048;
 
 // STATIC: 0x00B49CA4
@@ -1215,13 +1215,17 @@ void FillInSolidTexture(const CImVector& color, CTexture* texture) {
 }
 
 // Whether a texture file of `size` bytes may be read now, with `available` bytes of the 4 MB read
-// budget left - the original's own test, with its unsigned arithmetic kept: the budget's counter is
-// given back on more paths than it is taken on and wraps, and the original reads that as room. The
-// one change: a file larger than the whole budget (a 2048 DXT5 BLP is 5.6 MB) asks for the whole
-// budget, not more than there is - the original never read one, so its texture never finished and
-// the model using it was never drawn. Not in the original.
+// budget left. The budget's counter is given back on more paths than it is taken on and wraps,
+// which reads as room. A file larger than the whole budget (a 2048 DXT5 BLP is 5.6 MB) asks for
+// the whole budget, so it is read once nothing else is, instead of never.
 static bool AsyncTextureFits(uint32_t size, uint32_t available) {
     return available >= (size < 0x400000 ? size : 0x400000);
+}
+
+// What is left of `available` once a file of `size` bytes was read: nothing, after a file that
+// took more than there was, rather than a wrapped counter every other file of the pass fits.
+static uint32_t AsyncTextureLeft(uint32_t size, uint32_t available) {
+    return size < available ? available - size : 0;
 }
 
 // VERIFY: f77dd4dd manual
@@ -1234,7 +1238,7 @@ void AsyncTextureHandler() {
 
         if (AsyncTextureFits(object->m_size, available)) {
             AsyncTextureProcess(object, 0);
-            available -= object->m_size;
+            available = AsyncTextureLeft(object->m_size, available);
         }
 
         object = next;
@@ -1245,7 +1249,7 @@ void AsyncTextureHandler() {
 
         if (AsyncTextureFits(object->m_size, available)) {
             AsyncTextureProcess(object, 0);
-            available -= object->m_size;
+            available = AsyncTextureLeft(object->m_size, available);
         }
 
         object = next;
