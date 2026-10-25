@@ -12,6 +12,7 @@
 #include "Engine/Source/Os/System.h"
 #include "Engine/Source/Os/TimeManager.h"
 #include "Engine/Source/Storm/H/storm.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00B1D2AC
 static int32_t s_sleepInBackground = 1;
@@ -352,6 +353,10 @@ void OsFindTextSectionBounds() {
 
 // OFFSET: 0x0086B5A0
 void OsValidateFunctionPointer(const void* ptr) {
+    if (wxl::seam::Os::ValidateFunctionPointer::Gate(&ptr)) {
+        return;
+    }
+
     if (!s_textStart || !s_textEnd) {
         OsFindTextSectionBounds();
     }
