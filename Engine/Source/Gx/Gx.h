@@ -9,6 +9,8 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C2iVector.h"
 
+static const float oo255 = (1.0f / 255.0f);
+
 class C2Vector;
 class C3Vector;
 class C44Matrix;
@@ -113,6 +115,7 @@ void GxRsSet(EGxRenderState which, void* value);
 void GxRsSet(EGxRenderState which, int32_t value);
 void GxRsSet(EGxRenderState which, float value);
 void GxUpdateAlphaRef(EGxRenderState which);
+// mask is a combination of GxBufferBit_* values.
 void GxSceneClear(uint32_t mask, CImVector color);
 void GxScenePresent();
 void GxuClearDrawList(EGxuDrawListCategory category);

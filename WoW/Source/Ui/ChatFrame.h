@@ -7,6 +7,7 @@
 #include "Engine/Source/Tempest/CImVector.h"
 #include "WoW/Source/Net/Types.h"
 #include "WoW/Source/Object/WGUID.h"
+#include "WoW/Source/Object/ObjectClient/Types.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/AccountData.h"
 #include "WoW/Source/Ui/Types.h"
 
@@ -282,7 +283,7 @@ class CGChat {
     static void SaveChatSettings();
     static void ZoneUpdate();
     static void ProcessPendingChatQueue();
-    static void LogReactionChanged(int32_t faction, int32_t reaction);
+    static void LogReactionChanged(int32_t faction, UNIT_REACTION reaction);
     static void LogFactionChanged(int32_t faction, int32_t delta, int32_t generic, float bonus);
     static void EnterWorld();
     static void InitializeGame();
@@ -374,8 +375,8 @@ class CGChat {
     static void HandleFlagsChanged(WOWGUID guid, uint8_t oldFlags, uint8_t newFlags, const char* channel);
     static void InviteNameQueryCallback(int32_t id, const WOWGUID& guid, void* param, bool success);
     static int32_t IsRecordedType(int32_t type);
-    static void RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t a6, const char* channelName, uint32_t lineID, const CGPlayer_C* player);
-    static void QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t a9, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation);
+    static void RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t zoneChannelID, const char* channelName, uint32_t lineID, const CGPlayer_C* player);
+    static void QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t unused, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation);
     static void NameQueryCallback(int32_t id, const WOWGUID& guid, void* param, bool success);
     static void TranslateMessage(uint32_t language, uint32_t skill, const char* text, char* buffer, uint32_t size, int32_t a6, int32_t a7);
     static void AddWhisperThrottled(uint32_t time);

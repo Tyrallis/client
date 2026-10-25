@@ -3,6 +3,7 @@
 #include <cstring>
 #include <malloc.h>
 #include "Engine/Source/FrameScript/FrameScript.h"
+#include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
 #include "Engine/Source/FrameScript/FrameScript_Object.h"
 #include "Engine/Source/Base/Status.h"
@@ -1451,6 +1452,7 @@ void FrameScript_Destroy() {
 // VERIFY: 8009da99 manual
 // OFFSET: 0x0081AA00
 void FrameScript_SignalEvent(uint32_t index, lua_State* L, int32_t argCount) {
+    WXL_CORE_ZONE("FrameScript.SignalEvent");
     if (!s_scriptEvents.Count()) {
         return;
     }

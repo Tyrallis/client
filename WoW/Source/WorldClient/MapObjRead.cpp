@@ -12,6 +12,7 @@
 #include "WoW/Source/WorldClient/Map.h"
 #include "WoW/Source/WorldClient/MapObj.h"
 #include "WoW/Source/WorldClient/MapObjGroup.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00ADFC4C
 TSList<CMapObj, TSGetExplicitLink<CMapObj> > CMapObj::s_asyncLoadQueue = TSExplicitList<CMapObj, offsetof(CMapObj, m_asyncLoadLink)>();
@@ -56,6 +57,10 @@ void CMapObjGroup::FixColorVertexAlpha() {
 // VERIFY: cd3ffadf manual
 // OFFSET: 0x007D7470
 void CMapObj::Load() {
+    if (wxl::seam::Listening(WXL_EV_MapObjectLoad)) {
+        wxl::seam::MapObj::Load::Before(this);
+    }
+
     SIffChunk* chunk = reinterpret_cast<SIffChunk*>(static_cast<uint8_t*>(this->m_pWmoData) + 12);
     this->m_header = reinterpret_cast<SMOHeader*>(&chunk->m_data);
 

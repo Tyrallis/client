@@ -100,9 +100,9 @@ static LONG CALLBACK FirstChanceHandler(EXCEPTION_POINTERS* info) {
         char line[1024];
 
         if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
-            _snprintf_s(line, sizeof(line), _TRUNCATE, "CRASH 0x%08lX at %s (%s 0x%llX)\n", code, where, info->ExceptionRecord->ExceptionInformation[0] ? "write" : "read", static_cast<unsigned long long>(info->ExceptionRecord->ExceptionInformation[1]));
+            _snprintf_s(line, sizeof(line), _TRUNCATE, "first-chance exception 0x%08lX at %s (%s 0x%llX), may be handled\n", code, where, info->ExceptionRecord->ExceptionInformation[0] ? "write" : "read", static_cast<unsigned long long>(info->ExceptionRecord->ExceptionInformation[1]));
         } else {
-            _snprintf_s(line, sizeof(line), _TRUNCATE, "CRASH 0x%08lX at %s\n", code, where);
+            _snprintf_s(line, sizeof(line), _TRUNCATE, "first-chance exception 0x%08lX at %s, may be handled\n", code, where);
         }
 
         LogLine(line);

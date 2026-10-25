@@ -12,6 +12,7 @@
 #include "Engine/Source/Os/System.h"
 #include "Engine/Source/Os/TimeManager.h"
 #include "Engine/Source/Storm/H/storm.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00B1D2AC
 static int32_t s_sleepInBackground = 1;
@@ -157,7 +158,7 @@ void IOsSystemCpuLog(const CpuIdInfo* info) {
     HSLOG log;
     SLogCreate("Logs\\cpu.log", 0, &log);
 
-    if (s_processorVendor == 4) {
+    if (s_processorVendor == OS_PROCESSOR_VENDOR_CPUID_FAILED) {
         SLogWrite(log, "UNABLE TO IDENTIFY CPU");
         SLogClose(log);
         return;
@@ -352,6 +353,10 @@ void OsFindTextSectionBounds() {
 
 // OFFSET: 0x0086B5A0
 void OsValidateFunctionPointer(const void* ptr) {
+    if (wxl::seam::Os::ValidateFunctionPointer::Gate(&ptr)) {
+        return;
+    }
+
     if (!s_textStart || !s_textEnd) {
         OsFindTextSectionBounds();
     }
@@ -572,14 +577,14 @@ uint32_t OsGetProcessorFeaturesEx(int32_t& vendor) {
         }
 
         if (!strncmp(info.m_vendor, s_vendorIds, 12)) {
-            s_processorVendor = 1;
+            s_processorVendor = OS_PROCESSOR_VENDOR_INTEL;
 
             if (info.m_maxStandard >= 4 && (info.m_standard4a >> 26)) {
                 features |= 0x40;
                 s_processorCores = static_cast<uint8_t>(info.m_standard4a >> 26) + 1;
             }
         } else if (!strncmp(info.m_vendor, s_vendorIds + 12, 12)) {
-            s_processorVendor = 2;
+            s_processorVendor = OS_PROCESSOR_VENDOR_AMD;
 
             uint8_t cores = static_cast<uint8_t>(info.m_extended8c);
 
@@ -591,7 +596,7 @@ uint32_t OsGetProcessorFeaturesEx(int32_t& vendor) {
             strncmp(info.m_vendor, s_vendorIds + 36, 12);
         }
     } else {
-        s_processorVendor = 4;
+        s_processorVendor = OS_PROCESSOR_VENDOR_CPUID_FAILED;
     }
 
     s_processorFeatures = features | 0x80000000;

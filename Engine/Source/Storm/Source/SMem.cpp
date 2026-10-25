@@ -4,6 +4,7 @@
 #include <winerror.h>
 #include <malloc.h>
 #include "Engine/Source/Storm/H/storm.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00ADE850
 static int32_t s_exitonfailure = 1;
@@ -44,17 +45,21 @@ void* STORMAPI SMemAlloc(size_t bytes, const char* filename, int32_t linenumber,
 
     if (!ptr) {
         FatalError(bytes, filename, linenumber);
+        wxl::seam::Storm::SMemAlloc::After(nullptr, bytes, filename, linenumber, flags);
         return nullptr;
     }
 
     _msize(ptr);
 
+    wxl::seam::Storm::SMemAlloc::After(ptr, bytes, filename, linenumber, flags);
     return ptr;
 }
 
 // VERIFY: fab6c035 auto
 // OFFSET: 0x0076E5A0
 int32_t STORMAPI SMemFree(void* ptr, const char* filename, int32_t linenumber, uint32_t flags) {
+    wxl::seam::Storm::SMemFree::Before(ptr, filename, linenumber, flags);
+
     if (ptr) {
         _msize(ptr);
         free(ptr);
@@ -72,17 +77,23 @@ int32_t STORMAPI SMemIsValidPointer(void* ptr, size_t bytes, uint32_t flags) {
 // VERIFY: 26d3182e manual
 // OFFSET: 0x0076E5E0
 void* STORMAPI SMemReAlloc(void* ptr, size_t bytes, const char* filename, int32_t linenumber, uint32_t flags) {
+    wxl::seam::Storm::SMemReAlloc::Before(ptr, bytes, filename, linenumber, flags);
+
     if (flags == SMEM_REALLOC_NULL) {
+        wxl::seam::Storm::SMemReAlloc::After(nullptr, ptr, bytes, filename, linenumber, flags);
         return nullptr;
     }
 
     if (!ptr) {
-        return SMemAlloc(bytes, filename, linenumber, flags);
+        void* result = SMemAlloc(bytes, filename, linenumber, flags);
+        wxl::seam::Storm::SMemReAlloc::After(result, ptr, bytes, filename, linenumber, flags);
+        return result;
     }
 
     size_t oldsize = _msize(ptr);
 
     if (flags & SMEM_FLAG_NOREALLOC) {
+        wxl::seam::Storm::SMemReAlloc::After(nullptr, ptr, bytes, filename, linenumber, flags);
         return nullptr;
     }
 
@@ -94,6 +105,7 @@ void* STORMAPI SMemReAlloc(void* ptr, size_t bytes, const char* filename, int32_
             FatalError(bytes, filename, linenumber);
         }
 
+        wxl::seam::Storm::SMemReAlloc::After(nullptr, ptr, bytes, filename, linenumber, flags);
         return nullptr;
     }
 
@@ -107,6 +119,7 @@ void* STORMAPI SMemReAlloc(void* ptr, size_t bytes, const char* filename, int32_
         memset(static_cast<uint8_t*>(newptr) + oldsize, 0, bytes - oldsize);
     }
 
+    wxl::seam::Storm::SMemReAlloc::After(newptr, ptr, bytes, filename, linenumber, flags);
     return newptr;
 }
 
