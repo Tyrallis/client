@@ -53,6 +53,7 @@
 #include "WoW/Source/WorldClient/MapObj.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "wxl/core/gpu.hpp"
+#include "wxl/core/storm.hpp"
 #include "wxl/events.h"
 #include "wxl/objects/fields.hpp"
 #include "wxl/services/script.h"
@@ -459,10 +460,10 @@ namespace WarcraftXL::Binding {
             return WXL_FALSE;
         }
         int32_t high = static_cast<int32_t>(offset >> 32);
-        // Method 0 is FILE_BEGIN: the offset is absolute, which is what read_at means.
-        return SFile::SetFilePointer(File(file), static_cast<int32_t>(offset & 0xFFFFFFFFu), &high, 0)
-                   ? WXL_TRUE
-                   : WXL_FALSE;
+        // Method 0 is FILE_BEGIN: the offset is absolute, which is what read_at means. The answer
+        // is the cursor afterwards, 0 for a seek to the start.
+        const int32_t at = SFile::SetFilePointer(File(file), static_cast<int32_t>(offset & 0xFFFFFFFFu), &high, 0);
+        return wxl::core::storm::SeekLanded(static_cast<uint32_t>(at), offset) ? WXL_TRUE : WXL_FALSE;
     }
 
     uint32_t WXL_CALL file_read(void* file, void* buffer, uint32_t count) {
@@ -487,10 +488,6 @@ namespace WarcraftXL::Binding {
 
     const char* WXL_CALL storage_base_path() {
         return SFile::m_basePath;
-    }
-
-    void WXL_CALL storage_rescan() {
-        SFile::RebuildHash();
     }
 
     uint32_t WXL_CALL archive_list(wxl_core_name_fn fn, void* user) {
@@ -602,7 +599,7 @@ namespace WarcraftXL::Binding {
         }
 
         void Describe(const System_SFile::ARCHIVEREC* rec, wxl_core_archive* out) {
-            out->path = rec->m_name;
+            out->path = wxl::core::storm::ArchiveName(rec->m_name, rec->m_directPath.c_str());
             out->priority = rec->m_priority;
             out->hash_entries = rec->m_header.m_hashTableSize;
             out->block_entries = rec->m_header.m_blockTableSize;
