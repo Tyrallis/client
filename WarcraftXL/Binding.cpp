@@ -11,7 +11,11 @@
 #include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/MPQGlobals.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
+#include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/SFileArchives.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
+#include "Engine/Source/Gx/CGxPool.h"
+#include "Engine/Source/Gx/CGxTex.h"
+#include "Engine/Source/SoundEngine/fmodex/src/fmod.h"
 #include "Engine/Source/Gx/Gx.h"
 #include "Engine/Source/Tempest/CRect.h"
 #include "Engine/Source/Tempest/C3Vector.h"
@@ -34,6 +38,7 @@
 #include "WoW/Source/Object/ObjectClient/VisibleItem_C.h"
 #include "WoW/Source/Object/Player.h"
 #include "WoW/Source/Object/Unit.h"
+#include "WoW/Source/DB/DBClient/DBClient.h"
 #include "WoW/Source/Glue/CGlueMgr.h"
 #include "WoW/Source/WowServices/Login.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
@@ -43,6 +48,7 @@
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/World.h"
+#include "wxl/core/gpu.hpp"
 #include "wxl/events.h"
 #include "wxl/objects/fields.hpp"
 #include "wxl/services/script.h"
@@ -531,5 +537,161 @@ namespace WarcraftXL::Binding {
         *width = w > 0.0f ? static_cast<uint32_t>(w + 0.5f) : 0u;
         *height = h > 0.0f ? static_cast<uint32_t>(h + 0.5f) : 0u;
         return WXL_TRUE;
+    }
+
+    // --- Memory -----------------------------------------------------------------------------
+    // Each row walks the client's own lists, as wxl.footprint asks on the main thread.
+
+    uint32_t WXL_CALL gx_resources(wxl_core_gpu_fn fn, void* user) {
+        CGxDevice* device = g_theGxDevicePtr;
+        if (!fn || !device || (device->m_api != GxApi_D3d9 && device->m_api != GxApi_D3d9Ex)) {
+            return 0;
+        }
+        uint32_t told = 0;
+        // A texture waiting to be created again holds a placeholder, not its texture.
+        for (CGxTex* texture = device->m_textures.Head(); texture; texture = device->m_textures.Next(texture)) {
+            wxl_core_gpu_resource resource = {};
+            if (!texture->m_needsCreation && texture->m_apiSpecificData &&
+                wxl::core::gpu::DescribeTexture(static_cast<IDirect3DBaseTexture9*>(texture->m_apiSpecificData), &resource)) {
+                fn(&resource, user);
+                ++told;
+            }
+        }
+        for (CGxPool* pool = device->m_poolList.Head(); pool; pool = device->m_poolList.Next(pool)) {
+            wxl_core_gpu_resource resource = {};
+            if (pool->m_apiSpecific &&
+                wxl::core::gpu::DescribeBuffer(static_cast<IDirect3DResource9*>(pool->m_apiSpecific), &resource)) {
+                fn(&resource, user);
+                ++told;
+            }
+        }
+        return told;
+    }
+
+    wxl_bool WXL_CALL sound_heap(uint64_t* current, uint64_t* peak) {
+        int now = 0;
+        int most = 0;
+        if (!current || !peak || FMOD_Memory_GetStats(&now, &most) != FMOD_OK) {
+            return WXL_FALSE;
+        }
+        *current = static_cast<uint32_t>(now);
+        *peak = static_cast<uint32_t>(most);
+        return WXL_TRUE;
+    }
+
+    uint64_t WXL_CALL script_heap() {
+        lua_State* L = FrameScript_GetContext();
+        if (!L) {
+            return 0;
+        }
+        return static_cast<uint64_t>(lua_gc(L, LUA_GCCOUNT, 0)) * 1024u + static_cast<uint64_t>(lua_gc(L, LUA_GCCOUNTB, 0));
+    }
+
+    namespace {
+        template <class T>
+        uint64_t Reserved(const std::vector<T>& vector) {
+            return static_cast<uint64_t>(vector.capacity()) * sizeof(T);
+        }
+
+        uint64_t PackedBytes(const System_SFile::BitPacked* bits) {
+            return bits ? (static_cast<uint64_t>(bits->m_bitCount) + 7) / 8 + sizeof(*bits) : 0;
+        }
+
+        void Describe(const System_SFile::ARCHIVEREC* rec, wxl_core_archive* out) {
+            out->path = rec->m_name;
+            out->priority = rec->m_priority;
+            out->hash_entries = rec->m_header.m_hashTableSize;
+            out->block_entries = rec->m_header.m_blockTableSize;
+            uint64_t bytes = Reserved(rec->m_hashTable) + Reserved(rec->m_blockTable);
+            if (const System_SFile::BlockEntryTable* blocks = rec->m_blockEntryTable) {
+                bytes += sizeof(*blocks) + Reserved(blocks->m_flagTable) + Reserved(blocks->m_fileTimes) +
+                         Reserved(blocks->m_crcs) + Reserved(blocks->m_md5s) + PackedBytes(blocks->m_hashes) +
+                         PackedBytes(blocks->m_entries);
+            }
+            if (const System_SFile::HashEntryTable* hashes = rec->m_hashEntryTable) {
+                bytes += sizeof(*hashes) + hashes->m_slotCount + PackedBytes(hashes->m_indices);
+            }
+            // A listfile name: a node of the map, and the name's own block when it outgrows the string.
+            for (const auto& name : rec->m_listfile) {
+                bytes += sizeof(name) + 4 * sizeof(void*) + (name.first.capacity() > 15 ? name.first.capacity() + 1 : 0);
+            }
+            out->bytes = bytes;
+        }
+    }
+
+    uint32_t WXL_CALL archive_tables(wxl_core_archive_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        uint32_t told = 0;
+        for (System_SFile::ARCHIVEREC* record : *System_MPQGlobals::GetArchiveList()) {
+            if (!record) {
+                continue;
+            }
+            wxl_core_archive archive = {};
+            Describe(record, &archive);
+            fn(&archive, user);
+            ++told;
+        }
+        return told;
+    }
+
+    wxl_bool WXL_CALL archive_of(void* archive, wxl_core_archive* out) {
+        const SArchive* handle = static_cast<const SArchive*>(archive);
+        if (!handle || !out || handle->m_type != SARCHIVE_MPQ || !handle->m_archive) {
+            return WXL_FALSE;
+        }
+        Describe(handle->m_archive, out);
+        return WXL_TRUE;
+    }
+
+    namespace {
+        template <class Rec>
+        void TellDb(const WowClientDB<Rec>& store, const char* file, wxl_core_db_fn fn, void* user) {
+            const uint64_t records = store.m_numRecords > 0 ? static_cast<uint64_t>(store.m_numRecords) : 0;
+            const uint64_t ids = records && store.m_maxID >= store.m_minID ? static_cast<uint64_t>(store.m_maxID - store.m_minID) + 1 : 0;
+            wxl_core_db db = {};
+            db.file = file;
+            db.loaded = store.m_loaded ? WXL_TRUE : WXL_FALSE;
+            db.records = static_cast<uint32_t>(records);
+            db.record_size = sizeof(Rec);
+            db.blocks[0] = store.m_records;
+            db.estimates[0] = records * sizeof(Rec);
+            db.blocks[1] = store.m_strings;
+            db.blocks[2] = store.m_recordsById;
+            db.estimates[2] = ids * sizeof(Rec*);
+            fn(&db, user);
+        }
+
+        template <class Rec>
+        void TellDb(const WowClientDB_RLE<Rec>& store, const char* file, wxl_core_db_fn fn, void* user) {
+            const uint64_t records = store.m_numRecords > 0 ? static_cast<uint64_t>(store.m_numRecords) : 0;
+            const uint64_t ids = records && store.m_maxID >= store.m_minID ? static_cast<uint64_t>(store.m_maxID - store.m_minID) + 1 : 0;
+            wxl_core_db db = {};
+            db.file = file;
+            db.loaded = store.m_loaded ? WXL_TRUE : WXL_FALSE;
+            db.records = static_cast<uint32_t>(records);
+            db.record_size = sizeof(Rec);
+            db.blocks[0] = store.m_data;
+            db.estimates[0] = records * sizeof(Rec);
+            db.blocks[1] = store.m_strings;
+            // The row pointers, and the index by id after them in the same block.
+            db.blocks[2] = store.m_records;
+            db.estimates[2] = (records + ids) * sizeof(Rec*);
+            fn(&db, user);
+        }
+    }
+
+    uint32_t WXL_CALL client_dbs(wxl_core_db_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        uint32_t told = 0;
+#define WXL_CLIENT_DB(global, Rec, store, file, row_size) \
+    TellDb(global, file, fn, user);                        \
+    ++told;
+#include "wxl/core/client_dbs.def"
+#undef WXL_CLIENT_DB
+        return told;
     }
 }

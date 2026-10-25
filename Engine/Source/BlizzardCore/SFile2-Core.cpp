@@ -129,6 +129,7 @@ void SFile::Destroy() {
 // VERIFY: bd1bd823 auto
 // OFFSET: 0x00421720
 int32_t STORMAPI SFile::CloseArchive(SArchive* archive) {
+    wxl::seam::Storage::CloseArchive::Before(archive);
     int32_t result = Blizzard::Mopaq::SFileCloseArchive(archive->m_archive);
     delete archive;
     return result;
@@ -205,6 +206,7 @@ int32_t STORMAPI SFile::OpenArchive(const char* path, int32_t priority, uint32_t
 
         if (result) {
             fprintf(stderr, "archive %s opened\n", path);
+            wxl::seam::Storage::OpenArchive::After(result, path, priority, flags, reinterpret_cast<void**>(archive));
             return result;
         }
     }
@@ -213,6 +215,7 @@ int32_t STORMAPI SFile::OpenArchive(const char* path, int32_t priority, uint32_t
     *archive = nullptr;
     SErrSetLastError(Blizzard::Mopaq::SFileGetLastError());
 
+    wxl::seam::Storage::OpenArchive::After(result, path, priority, flags, reinterpret_cast<void**>(archive));
     return result;
 }
 

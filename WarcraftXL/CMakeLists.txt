@@ -43,6 +43,16 @@ if (Python3_Interpreter_FOUND)
         VERBATIM)
     add_dependencies(WorldClient wxl-seam-check)
 
+    # Core's list of the client databases is generated from this fork's DBClient.cpp and record
+    # types; Binding.cpp names every global in it, and x86 reads each at its static's address.
+    add_custom_target(wxl-dbs-check
+        COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/dbs/generate_client_dbs.py" --check
+                --client "${CMAKE_SOURCE_DIR}"
+                --out "${WXL_CORE_DIR}/include/wxl/core/client_dbs.def"
+        COMMENT "Checking core's list of client databases against the fork"
+        VERBATIM)
+    add_dependencies(WorldClient wxl-dbs-check)
+
     # The SDK's update-field table is generated from this fork's field descriptors, descriptor
     # blocks and mirror lists. generate_update_fields.py --check measures the blocks with clang-cl
     # and fails when the table is not what the fork gives, so a pull that moves a field is caught
@@ -76,11 +86,12 @@ endif ()
 # player's, Ui the game interface's, FrameScript the script context's, Net the world
 # connection's, Os the window procedure's, BlizzardCore the file open's, SoundInterface
 # the sound's, Scrn the paint's, Gx the device's, Frame the interface's, ConsoleDevice
-# the device's creation and Magic the spell casting's. A library added
+# the device's creation, Magic the spell casting's, Storm the allocator's and DB the client
+# databases'. A library added
 # here needs nothing else: the calls are declared by Seams.h,
 # which these include directories make reachable.
 set(WXL_SEAM_LIBRARIES WorldClient Event ObjectMgrClient Object Ui FrameScript Net Os BlizzardCore
-    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices)
+    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB)
 
 # The executables carry seam calls of their own: Client.cpp holds the one that takes the client
 # apart. On x64 they link WarcraftXLClient, whose include directories are PUBLIC; on Win32 there

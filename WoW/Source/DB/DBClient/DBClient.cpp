@@ -3,6 +3,7 @@
 #include "Engine/Source/ConsoleBase/IConsole.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Storm/H/stpl.h"
+#include "WarcraftXL/Seams.h"
 #include "WoW/Source/DB/Rec/MapDifficultyRec.h"
 
 // STATIC: 0x00AD3028
@@ -1147,6 +1148,7 @@ void ClientDBInitialize() {
     InitWeaponSubclasses();
     SDBItemSubclassInitialize();
     InitLights(1);
+    wxl::seam::ClientDb::Initialize::After();
 }
 
 // VERIFY: 144a65d1 auto
