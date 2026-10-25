@@ -127,6 +127,8 @@ enum GLUE_IDLE_STATE {
     IDLE_12 = 12,
     IDLE_13 = 13,
     IDLE_14 = 14,
+    // WXL: logged in to the authserver, waiting for the worldserver to come up
+    IDLE_WORLDSERVER_WAIT = 15,
 };
 
 #endif

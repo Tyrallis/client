@@ -26,6 +26,24 @@ A 64-bit `WowClient64.exe` that plays like the original and loads mods written a
 [WarcraftXL core](https://github.com/WarcraftXL/core) linked in: the same runtime that loads into
 the stock 32-bit client by detour is called here by the client's own source.
 
+### This branch: `x64-port` (Tyrallis)
+
+This fork's `x64-port` branch adds what the 64-bit ports of these mods need, as seams and bindings
+in the client and services in [core](https://github.com/Tyrallis/core/tree/x64-port) and
+[sdk](https://github.com/Tyrallis/sdk/tree/x64-port) (the same branch name in each):
+
+| Mod | Needs |
+|---|---|
+| [wxl.modern-m2](https://github.com/Tyrallis/wxl.modern-m2) | `wxl.m2file`: retail models read by the loader |
+| [wxl.equip-plus](https://github.com/Tyrallis/wxl.equip-plus) | `wxl.m2` attachments and bone watchers (live retail physics), character component seams |
+| [wxl.retail-spellvisuals](https://github.com/Tyrallis/wxl.retail-spellvisuals) | `wxl.m2` world models, `wxl.gx` (body glows), the cast events' ground point |
+| [wxl.unit-outline](https://github.com/Tyrallis/wxl.unit-outline) | `wxl.gx`: the D3D9 device and model batches |
+
+It also accepts unsigned interface files and patches by default
+(`WOWDECOMP_DISABLE_SIGNATURE_CHECKS=ON`), which the mods' patches and the
+[Retroport Workbench](https://github.com/Tyrallis/Retroport/tree/creatures)'s need. A step-by-step
+install guide is on the [Retroport Releases](https://github.com/Tyrallis/Retroport/releases) page.
+
 ### Key features
 
 - **Mods, without addresses.** The runtime is told where the client is by calls the client makes,
@@ -58,8 +76,16 @@ the stock 32-bit client by detour is called here by the client's own source.
   2026 (MSVC 14.51) builds it as is; the upstream README's request for 2022 is a minimum, not a
   requirement.
 - CMake 3.21 or newer (the one that ships with Visual Studio works).
-- Checkouts of [`WarcraftXL/core`](https://github.com/WarcraftXL/core) and
-  [`WarcraftXL/sdk`](https://github.com/WarcraftXL/sdk) beside this one:
+- Checkouts of [`Tyrallis/core`](https://github.com/Tyrallis/core/tree/x64-port) and
+  [`Tyrallis/sdk`](https://github.com/Tyrallis/sdk/tree/x64-port), on the `x64-port` branch like this
+  one, beside it:
+
+  ```
+  git clone -b x64-port https://github.com/Tyrallis/client
+  git clone -b x64-port https://github.com/Tyrallis/core
+  git clone -b x64-port https://github.com/Tyrallis/sdk
+  ```
+
 
   ```
   WarcraftXL/
@@ -115,8 +141,9 @@ Win32; the seam calls compile to nothing there.
 4. Start `WowClient64.exe`. The runtime's log is `Logs/WarcraftXL.log` next to it; the client's own
    logs are in the same folder.
 
-The signature checks of the original are kept (`WOWDECOMP_DISABLE_SIGNATURE_CHECKS=OFF`): modified
-interface files need the option, or a mod such as core's `wxl.glue-unlock` on the stock client.
+On this branch the signature checks are off by default (`WOWDECOMP_DISABLE_SIGNATURE_CHECKS=ON`), so
+modified interface files and unsigned patches load. Pass `-DWOWDECOMP_DISABLE_SIGNATURE_CHECKS=OFF`
+to keep the original's checks.
 
 ## 🔎 What it is
 
