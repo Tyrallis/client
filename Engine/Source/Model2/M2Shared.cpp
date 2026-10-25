@@ -25,6 +25,7 @@
 #include "Engine/Source/Tempest/CImVector.h"
 #include "Engine/Source/Os/OsMemory.h"
 #include "WarcraftXL/Seams.h"
+#include "WarcraftXL/Points.h"
 
 // STATIC: 0x00A45644
 static const uint32_t s_skinProfileBoneCounts[4] = { 256, 64, 53, 21 };
@@ -1728,6 +1729,7 @@ int32_t CM2Shared::Initialize() {
 
 // INLINED
 int32_t CM2Shared::FinishLoading() {
+    WXL_POINT_5(this); // wxl.point
     if (this->m_flags & 1) {
         return 1;
     }
