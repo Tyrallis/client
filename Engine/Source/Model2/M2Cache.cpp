@@ -16,6 +16,7 @@
 #include "Engine/Source/Services/ParticleSystem2.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Tempest/CRandom.h"
+#include "WarcraftXL/Points.h"
 
 // STATIC: 0x00D3FCE8
 CM2ModelHeap* g_modelPool;
@@ -230,6 +231,7 @@ void CM2Cache::Destroy() {
 // VERIFY: ac4bc72b manual
 // OFFSET: 0x0081C390
 CM2Shared* CM2Cache::CreateShared(const char* name, uint32_t flags) {
+    WXL_POINT_1(this, name, flags); // wxl.point
     char path[260];
     SStrCopy(path, name, sizeof(path));
     SStrLower(path);

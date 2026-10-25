@@ -14,6 +14,7 @@
 #include "WoW/Source/Object/WGUID.h"
 #include "WoW/Source/Ui/LootFrame.h"
 #include "Engine/Source/Storm/H/storm.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00ACFD98
 TSList<CLIENT_ACHIEVEMENT_CRITERIA, TSGetLink<CLIENT_ACHIEVEMENT_CRITERIA>> s_criteria;
@@ -657,6 +658,9 @@ void CGAchievementInfo::UpdateInspectCriteria(WOWGUID guid, int32_t id, uint64_t
 // VERIFY: 223cdc99 manual
 // OFFSET: 0x005B3020
 int32_t Packet_SMSG_ACHIEVEMENT_EARNED(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_AchievementEarned)) {
+        wxl::seam::Achievement::Packet_SMSG_ACHIEVEMENT_EARNED::Before(param, msgId, time, msg);
+    }
     WowTime date;
     SmartGUID player;
     int32_t id;

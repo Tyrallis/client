@@ -18,6 +18,7 @@
 #include "Engine/Source/Tempest/CMath.h"
 #include "Engine/Source/Tempest/CRandom.h"
 #include "GameVersion.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00D4383C
 int32_t SE2::sm_bCaptureInitialized;
@@ -2813,6 +2814,10 @@ void SE2::StopAllSounds(int32_t restart) {
 // VERIFY: 675bfdff manual
 // OFFSET: 0x0087EE60
 int32_t SE2::CreateWaveData(FMOD::System* system, const char* filename, FMOD_MODE mode, SESound* sound, FMOD::SoundGroup* loadSoundGroup, FMOD::SoundGroup* soundGroup, bool randomStart, int32_t priority, int32_t reverb, bool streaming, uint32_t decodeBufferSize, int32_t software, float coneInsideAngle, float coneOutsideAngle, float coneOutsideVolume, const C3Vector* coneOrientation) {
+    if (wxl::seam::Listening(WXL_EV_SoundFileLoad)) {
+        wxl::seam::Sound::CreateWaveData::Before(system, filename, mode, sound, loadSoundGroup, soundGroup, randomStart, priority, reverb, streaming, decodeBufferSize, software, coneInsideAngle, coneOutsideAngle, coneOutsideVolume, coneOrientation);
+    }
+
     s_createCritSect.Enter();
 
     SEWaveDataNode* waveData = nullptr;

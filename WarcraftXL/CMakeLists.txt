@@ -43,6 +43,19 @@ if (Python3_Interpreter_FOUND)
         VERBATIM)
     add_dependencies(WorldClient wxl-seam-check)
 
+    # The points of wxl.point are one line at the head of each listed function, written by
+    # core/tools/points/insert_points.py. A pull that drops, moves or renames one fails here, and
+    # so does a point list or a generated table (Points.gen.h, the SDK's points.def) that is not
+    # what core's points.txt and this fork give.
+    add_custom_target(wxl-point-check
+        COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/points/insert_points.py" --check
+                --client "${CMAKE_SOURCE_DIR}"
+        COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/points/generate_points.py" --check --quiet
+                --client "${CMAKE_SOURCE_DIR}" --sdk "${WXL_SDK_DIR}"
+        COMMENT "Checking the point lines and tables against core's point list"
+        VERBATIM)
+    add_dependencies(WorldClient wxl-point-check)
+
     # Core's list of the client databases is generated from this fork's DBClient.cpp and record
     # types; Binding.cpp names every global in it, and x86 reads each at its static's address.
     add_custom_target(wxl-dbs-check
@@ -86,12 +99,17 @@ endif ()
 # player's, Ui the game interface's, FrameScript the script context's, Net the world
 # connection's, Os the window procedure's, BlizzardCore the file open's, SoundInterface
 # the sound's, Scrn the paint's, Gx the device's, Frame the interface's, ConsoleDevice
-# the device's creation, Magic the spell casting's, Storm the allocator's and DB the client
-# databases'. A library added
+# the device's creation, Magic the spell casting's, Storm the allocator's, DB the client
+# databases' and WoWCommon the character appearance's. A library added
 # here needs nothing else: the calls are declared by Seams.h,
 # which these include directories make reachable.
 set(WXL_SEAM_LIBRARIES WorldClient Event ObjectMgrClient Object Ui FrameScript Net Os BlizzardCore
-    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2)
+    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2
+    BLPFile SoundEngine WoWCommon)
+
+# The libraries whose sources carry point lines (WarcraftXL/Points.h) and no seam call: UIUtil
+# holds the camera's.
+set(WXL_POINT_LIBRARIES UIUtil)
 
 # The libraries whose sources carry profiler zones (WarcraftXL/Profile.h) and no seam call. The
 # zones compile to nothing on Win32, so these need the runtime only on x64.
@@ -103,7 +121,7 @@ set(WXL_ZONE_LIBRARIES Model2)
 set(WXL_SEAM_EXECUTABLES Wow WowClient)
 
 if (NOT WOWDECOMP_ARCH_64)
-    foreach (target ${WXL_SEAM_LIBRARIES} ${WXL_SEAM_EXECUTABLES})
+    foreach (target ${WXL_SEAM_LIBRARIES} ${WXL_POINT_LIBRARIES} ${WXL_SEAM_EXECUTABLES})
         if (TARGET ${target})
             target_include_directories(${target} PRIVATE "${WXL_CORE_DIR}/include" "${WXL_SDK_DIR}/include")
         endif ()
@@ -166,7 +184,7 @@ foreach (target ${WXL_SEAM_LIBRARIES})
         target_link_libraries(${target} PRIVATE wxl-core)
     endif ()
 endforeach ()
-foreach (target ${WXL_ZONE_LIBRARIES})
+foreach (target ${WXL_ZONE_LIBRARIES} ${WXL_POINT_LIBRARIES})
     target_include_directories(${target} PRIVATE "${WXL_CORE_DIR}/include" "${WXL_SDK_DIR}/include")
     target_link_libraries(${target} PRIVATE wxl-core)
 endforeach ()

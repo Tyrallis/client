@@ -63,6 +63,9 @@ static TSHashTable<ITEMBYNAME, HASHKEY_UTF8I> s_itemByName;
 // VERIFY: 1390e3e9 manual
 // OFFSET: 0x00707720
 static int32_t OnUpdateStackCount(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_ItemStackChanged)) {
+        wxl::seam::Item::OnUpdateStackCount::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item->m_item->m_itemFieldOwner == ClntObjMgrGetActivePlayer()) {
@@ -177,6 +180,9 @@ static int32_t OnUpdateDynamicFlags(WOWGUID guid, uint32_t fieldOffset, uint32_t
 // VERIFY: 0a592725 manual
 // OFFSET: 0x00707AE0
 static int32_t OnUpdateDurability(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_ItemDurabilityChanged)) {
+        wxl::seam::Item::OnUpdateDurability::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item) {

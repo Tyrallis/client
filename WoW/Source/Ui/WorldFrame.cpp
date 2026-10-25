@@ -92,6 +92,7 @@
 #include "Engine/Source/ShaderEffect/Types.h"
 #include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
+#include "WarcraftXL/Points.h"
 
 // STATIC: 0x009F9864
 static const CURSORMODE s_skinCursorModes[2] = { SKIN_ALLIANCE_CURSOR, SKIN_HORDE_CURSOR };
@@ -2103,6 +2104,7 @@ void CGWorldFrame::OnWorldUpdate() {
 // VERIFY: 09c5961f manual
 // OFFSET: 0x004FAF90
 void CGWorldFrame::RenderWorld(void* param) {
+    WXL_POINT_2(param); // wxl.point
     WXL_CORE_ZONE("World.Render");
     wxl::seam::WorldFrame::RenderWorld::Before(param);
     CGWorldFrame* worldFrame = static_cast<CGWorldFrame*>(param);

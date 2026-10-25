@@ -40,6 +40,7 @@
 #include "WoW/Source/UIUtil/InputControl.h"
 #include "WoW/Source/WorldClient/FrameTime.h"
 #include "WoW/Source/WorldClient/World.h"
+#include "WarcraftXL/Points.h"
 
 static const float ROTATION_SPEED = 0.09f;
 static const float MAX_DELTA = 0.2617994f;
@@ -2672,6 +2673,7 @@ void CGCamera::CalcTargetCamera(CGObject_C* target, uint32_t time) {
 // VERIFY: 4dd64323 manual
 // OFFSET: 0x00607B00
 int32_t CGCamera::UpdateCallback(const void* data, void* param) {
+    WXL_POINT_0(data, param); // wxl.point
     CGCamera* camera = static_cast<CGCamera*>(param);
 
     if (!camera) {

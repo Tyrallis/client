@@ -25,6 +25,7 @@
 #include "Engine/Source/Tempest/CImVector.h"
 #include "Engine/Source/Os/OsMemory.h"
 #include "WarcraftXL/Seams.h"
+#include "WarcraftXL/Points.h"
 
 // STATIC: 0x00A45644
 static const uint32_t s_skinProfileBoneCounts[4] = { 256, 64, 53, 21 };
@@ -358,7 +359,7 @@ int32_t CM2Shared::SetIndices() {
 
         for (uint32_t i = 0; i < this->m_skinData->m_skinSections.m_count; i++) {
             M2SkinSection* section = &this->m_skinSections[i];
-            uint32_t start = this->m_skinData->m_skinSections[i].m_indexStart;
+            uint32_t start = M2SkinSectionIndexStart(*this->m_skinData, this->m_skinData->m_skinSections[i]);
             uint16_t offset = sharedVertices ? 0 : static_cast<uint16_t>(-section->m_vertexStart);
 
             for (uint32_t instance = 0; instance < this->m_instances; instance++) {
@@ -370,7 +371,7 @@ int32_t CM2Shared::SetIndices() {
                 offset += sharedVertices ? static_cast<uint16_t>(this->m_skinData->m_vertices.m_count) : section->m_vertexCount;
             }
 
-            section->m_indexStart = static_cast<uint16_t>(indexStart);
+            M2SkinSectionSetDrawStart(*section, indexStart);
             indexStart += this->m_instances * section->m_indexCount;
         }
 
@@ -742,7 +743,9 @@ CShaderEffect* CM2Shared::GetEffect(M2Batch* batch) {
                 alphaOp = static_cast<EGxTexOp>(3);
                 break;
             default:
-                break;
+                // A packed shader id past the three named here (later model files carry more)
+                // names no shaders: no effect, as for 0.
+                return nullptr;
         }
 
         char effectName[256];
@@ -1132,6 +1135,10 @@ void CM2Shared::SubstituteSpecializedShaders() {
 // VERIFY: 6736c39f manual
 // OFFSET: 0x00837A40
 int32_t CM2Shared::InitializeSkinProfile() {
+    if (wxl::seam::Listening(WXL_EV_SkinProfileParsed)) {
+        wxl::seam::M2Shared::InitializeSkinProfile::Before(this);
+    }
+
     M2SkinProfile* skinData = this->m_skinData;
 
     this->m_maxInstances = skinData->m_indices.m_count ? 0x10000 / skinData->m_indices.m_count : 1;
@@ -1303,6 +1310,10 @@ int32_t M2Init<M2TextureWeight>(uint8_t* base, uint32_t size, const M2Data& data
 // VERIFY: 2f176c2e auto
 // OFFSET: 0x00838490
 int32_t CM2Shared::FinishLoadingSkinProfile(uint32_t size) {
+    if (wxl::seam::Listening(WXL_EV_SkinProfileLoad)) {
+        wxl::seam::M2Shared::FinishLoadingSkinProfile::Before(this, size);
+    }
+
     if (this->m_flags & 2) {
         return 1;
     }
@@ -1550,6 +1561,10 @@ int32_t M2Init(uint8_t* base, uint32_t size, M2Data& data) {
 // VERIFY: 8000b812 manual
 // OFFSET: 0x0083C6E0
 int32_t CM2Shared::FinishLoadingLowPrioritySequence(uint32_t sequenceIndex, uint8_t* buffer, uint32_t size) {
+    if (wxl::seam::Listening(WXL_EV_ModelSequenceLoad)) {
+        wxl::seam::M2Shared::FinishLoadingLowPrioritySequence::Before(this, sequenceIndex, buffer, size);
+    }
+
     s_sequenceIndex = sequenceIndex;
     s_sequenceData = buffer;
 
@@ -1655,6 +1670,10 @@ uint32_t CM2Shared::GetSkinProfileIndex(uint32_t maxBones) {
 // VERIFY: 38f10509 manual
 // OFFSET: 0x0083CC80
 int32_t CM2Shared::Initialize() {
+    if (wxl::seam::Listening(WXL_EV_ModelParsed)) {
+        wxl::seam::M2Shared::Initialize::Before(this);
+    }
+
     uint32_t maxBones = 256;
 
     if (this->m_cache->m_flags & 8) {
@@ -1728,6 +1747,7 @@ int32_t CM2Shared::Initialize() {
 
 // INLINED
 int32_t CM2Shared::FinishLoading() {
+    WXL_POINT_5(this); // wxl.point
     if (this->m_flags & 1) {
         return 1;
     }

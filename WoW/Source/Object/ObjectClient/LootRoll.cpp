@@ -619,3 +619,9 @@ int32_t LootRollWon(CDataStore* msg) {
     CGPlayer_C::ClearLootItemSlotType(lootGuid, slot);
     return 1;
 }
+
+// The id LootRollStart gives the next roll it keeps, which RollOnLoot names it by: read by
+// WarcraftXL (WarcraftXL/Binding.cpp, loot_next_roll_id).
+int32_t WarcraftXLNextLootRollId() {
+    return s_nextLootRollId;
+}

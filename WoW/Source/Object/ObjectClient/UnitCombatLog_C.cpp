@@ -1167,6 +1167,9 @@ void UnitCombatLogInstakill(const WOWGUID& casterGuid, const WOWGUID& targetGuid
 // VERIFY: 80058a0f auto
 // OFFSET: 0x00752860
 void UnitCombatLogAuraDose(CGUnit_C* unit, const AuraData* aura, int32_t spellId, int32_t oldStack, int32_t newStack, uint8_t a6) {
+    if (wxl::seam::Listening(WXL_EV_UnitAuraRefreshed)) {
+        wxl::seam::Combat::UnitCombatLogAuraDose::Before(unit, aura, spellId, oldStack, newStack, a6);
+    }
     SpellRec spell;
 
     if (g_spellDB.GetRecord(spellId, &spell) && !(spell.m_attributes & 0x180) && *spell.m_name && spell.m_cumulativeAura > 1) {
@@ -2356,6 +2359,9 @@ void CombatLog::AddSpellRemoveEntry(const WOWGUID& source, const WOWGUID& dest, 
 // VERIFY: 6403f90e auto
 // OFFSET: 0x00752BA0
 void UnitCombatLogAuraRefreshed(CGUnit_C* unit, const AuraData* aura, int32_t spellId, uint8_t a4) {
+    if (wxl::seam::Listening(WXL_EV_UnitAuraRefreshed)) {
+        wxl::seam::Combat::UnitCombatLogAuraRefreshed::Before(unit, aura, spellId, a4);
+    }
     SpellRec spell;
 
     if (!g_spellDB.GetRecord(spellId, &spell) || (spell.m_attributes & 0x180) || !*spell.m_name || (spell.m_attributes & 0x40) || (spell.m_attributesExF & 0x400)) {

@@ -3277,6 +3277,7 @@ int32_t Packet_SMSG_GROUP_DECLINE(void* param, NETMESSAGE msgId, uint32_t time, 
 // VERIFY: 19b171e9 auto
 // OFFSET: 0x006CBE10
 int32_t Packet_SMSG_GROUP_UNINVITE(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Player::Packet_SMSG_GROUP_UNINVITE::Before(param, msgId, time, msg);
     CGPartyInfo::RemoveAll(1);
     CGGameUI::DisplayError(ERR_UNINVITE_YOU);
     CGLookingForGroup::ClearPartyInfo();
@@ -3287,6 +3288,7 @@ int32_t Packet_SMSG_GROUP_UNINVITE(void* param, NETMESSAGE msgId, uint32_t time,
 // VERIFY: 83ee7b00 auto
 // OFFSET: 0x006CBE40
 int32_t Packet_SMSG_GROUP_DESTROYED(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Player::Packet_SMSG_GROUP_DESTROYED::Before(param, msgId, time, msg);
     if (CGPartyInfo::GetNumPartyMembers()) {
         CGGameUI::DisplayError(ERR_GROUP_DISBANDED);
     }
@@ -3583,6 +3585,9 @@ int32_t Packet_SMSG_RESURRECT_FAILED(void* param, NETMESSAGE msgId, uint32_t tim
 // VERIFY: c9571cc5 manual
 // OFFSET: 0x006CFE70
 int32_t Packet_SMSG_EMOTE(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_Emote)) {
+        wxl::seam::Player::Packet_SMSG_EMOTE::Before(param, msgId, time, msg);
+    }
     uint32_t emote;
     WOWGUID guid;
     msg->Get(emote);
@@ -3763,6 +3768,9 @@ int32_t Packet_SMSG_COMBAT_LOG_MULTIPLE(void* param, NETMESSAGE msgId, uint32_t 
 // VERIFY: 4accacac manual
 // OFFSET: 0x006D7F10
 int32_t Packet_Group_12(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_QuestTurnedIn) || wxl::seam::Listening(WXL_EV_QuestGiverGreeting) || wxl::seam::Listening(WXL_EV_QuestGiverDetail) || wxl::seam::Listening(WXL_EV_QuestGiverProgress) || wxl::seam::Listening(WXL_EV_QuestGiverReward)) {
+        wxl::seam::Player::Packet_Group_12::Before(param, msgId, time, msg);
+    }
     WOWGUID activePlayer = ClntObjMgrGetActivePlayer();
 
     if (!activePlayer.m_guid || !ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__)) {
@@ -3989,6 +3997,9 @@ int32_t Packet_Group_13(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
 // VERIFY: 77263fbe auto
 // OFFSET: 0x006D84F0
 int32_t PH_LOOT_OPCODES(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_LootMoney) || wxl::seam::Listening(WXL_EV_LootRollStart) || wxl::seam::Listening(WXL_EV_LootRoll) || wxl::seam::Listening(WXL_EV_LootRollWon) || wxl::seam::Listening(WXL_EV_LootAllPassed)) {
+        wxl::seam::Player::PH_LOOT_OPCODES::Before(param, msgId, time, msg);
+    }
     CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
@@ -4232,6 +4243,14 @@ int32_t Packet_SMSG_INITIAL_SPELLS(void* param, NETMESSAGE msgId, uint32_t time,
 // VERIFY: 8fa31e36 manual
 // OFFSET: 0x006DF1A0
 int32_t Packet_SMSG_GROUP_INVITE(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_GroupInvite)) {
+        uint32_t wxlMsgId = msgId;
+        void* wxlMsg = msg;
+        int32_t gated = 0;
+        if (wxl::seam::Player::Packet_SMSG_GROUP_INVITE::Gate(&gated, &param, &wxlMsgId, &time, &wxlMsg)) {
+            return gated;
+        }
+    }
     uint8_t canAccept = 0;
     msg->Get(canAccept);
     char name[48];
@@ -7118,6 +7137,9 @@ static void QuestAcceptCallback(int32_t id, const WOWGUID& guid, void* param, bo
 // VERIFY: ac232887 manual
 // OFFSET: 0x006DF370
 int32_t OnUpdateQuest(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
+    if (wxl::seam::Listening(WXL_EV_QuestAccepted) || wxl::seam::Listening(WXL_EV_QuestRemoved) || wxl::seam::Listening(WXL_EV_QuestObjectiveChanged) || wxl::seam::Listening(WXL_EV_QuestCompleted) || wxl::seam::Listening(WXL_EV_QuestFailed)) {
+        wxl::seam::Player::OnUpdateQuest::Before(guid.m_guid, offset, count, value, param);
+    }
     CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
@@ -11526,6 +11548,7 @@ bool CGPlayer_C::LoadGuildTextures(int32_t displayId) {
 // VERIFY: 90dc58ea manual
 // OFFSET: 0x006D8870
 int32_t Packet_SMSG_GROUP_LIST(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Player::Packet_SMSG_GROUP_LIST::Before(param, msgId, time, msg);
     uint8_t groupType;
     msg->Get(groupType);
     bool isRaid = (groupType & 0x2) != 0;
@@ -12568,6 +12591,14 @@ static void ResurrectNameQueryCallback(int32_t id, const WOWGUID& guid, void* pa
 // VERIFY: ee9e13c1 manual
 // OFFSET: 0x006DBD00
 int32_t Packet_SMSG_RESURRECT_REQUEST(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_ResurrectRequest)) {
+        uint32_t wxlMsgId = msgId;
+        void* wxlMsg = msg;
+        int32_t gated = 0;
+        if (wxl::seam::Player::Packet_SMSG_RESURRECT_REQUEST::Gate(&gated, &param, &wxlMsgId, &time, &wxlMsg)) {
+            return gated;
+        }
+    }
     WOWGUID offerer;
     uint32_t length;
     void* data;
@@ -13109,6 +13140,7 @@ void CGPlayer_C::UpdateGhostStatus() {
     ClntObjMgrEnumVisibleObjects(TrackingMaskUpdateProc, nullptr);
     PlayerNameTriggerColorUpdateAll();
     this->UpdateReaction(false);
+    wxl::seam::Player::UpdateGhostStatus::After(this);
 }
 
 // VERIFY: f8ed8b8a manual

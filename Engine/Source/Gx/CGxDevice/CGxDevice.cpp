@@ -1674,6 +1674,10 @@ void CGxDevice::DeviceCreatePools() {
 // VERIFY: 3ce50085 manual
 // OFFSET: 0x00684970
 void CGxDevice::IShaderLoad(CGxShader** shaders, EGxShTarget target, const char* path, const char* name, uint32_t permutations) {
+    if (wxl::seam::Listening(WXL_EV_ShaderLoad)) {
+        wxl::seam::Gx::IShaderLoad::Before(this, shaders, target, path, name, permutations);
+    }
+
     enum : uint32_t {
         Magic = 0x47585348, // 'GXSH'
         Version = 0x10003,

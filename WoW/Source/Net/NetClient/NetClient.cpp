@@ -11,6 +11,7 @@
 #include "WoW/Source/Glue/CGlueMgr.h"
 #include "WoW/Source/WowServices/HMAC.h"
 #include "WarcraftXL/Seams.h"
+#include "WarcraftXL/Points.h"
 
 // STATIC: 0x00AD2ED0
 static TSList<NETCLIENTNODE> s_clientList;
@@ -272,6 +273,7 @@ void NetClient::ResetHandler(NETMESSAGE msgId) {
 // VERIFY: 59f00590 auto
 // OFFSET: 0x00631FE0
 int32_t NetClient::ProcessMessage(uint32_t timeReceived, CDataStore* msg, int32_t unused_a4) {
+    WXL_POINT_4(this, timeReceived, msg, unused_a4); // wxl.point
     void* self = this;
     void* message = msg;
     int32_t gated = 0;

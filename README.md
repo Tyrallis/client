@@ -6,7 +6,7 @@
 
 [![Client](https://img.shields.io/badge/client-3.3.5a%20(12340)-orange.svg)](#-what-it-is)
 [![Target](https://img.shields.io/badge/target-x64-lightgrey.svg)](#-building)
-[![ABI](https://img.shields.io/badge/ABI-0.1.15-blue.svg)](https://github.com/WarcraftXL/sdk)
+[![ABI](https://img.shields.io/badge/ABI-0.1.20-blue.svg)](https://github.com/WarcraftXL/sdk)
 [![Runtime](https://img.shields.io/badge/runtime-WarcraftXL%20core-blue.svg)](https://github.com/WarcraftXL/core)
 
 </div>
@@ -48,6 +48,7 @@ the stock 32-bit client by detour is called here by the client's own source.
 - [Adding a seam](#-adding-a-seam)
 - [Layout](#-layout)
 - [Troubleshooting](#-troubleshooting)
+- [Contributors](#-contributors)
 - [License](#-license)
 
 ## ⚡ Building
@@ -186,6 +187,12 @@ NOTICE.md                provenance and what is, and is not, licensed
 | `refused … requires service wxl.hook.raw` or `wxl.patch` | the mod is written for the stock client's addresses; it has nothing to attach to here |
 | `refused … requires service wxl.hook` | the mod wants to detour a named point; here they are seams, so subscribe to the events they raise instead |
 | Win32: 8 unresolved externals | expected at this fork point, see [Win32](#win32) |
+
+## 🤝 Contributors
+
+Upstream's contributors are credited in [UPSTREAM.md](UPSTREAM.md). Tyrallis brought the model and
+appearance seams, skins over 65535 indices, the optional geometry's geoset ids and textures over
+4 MB (pull request #1).
 
 ## 📄 License
 

@@ -344,6 +344,10 @@ void CMapArea::ProcessIffChunks() {
 // VERIFY: ff270d7a auto
 // OFFSET: 0x007D7020
 void CMapArea::AsyncCallback(void* param) {
+    if (wxl::seam::Listening(WXL_EV_TerrainTileLoad)) {
+        wxl::seam::MapArea::AsyncCallback::Before(param);
+    }
+
     CMapArea* area = static_cast<CMapArea*>(param);
 
     area->ProcessIffChunks();

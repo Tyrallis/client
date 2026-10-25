@@ -947,6 +947,13 @@ void System_SFile2::BuildFileSystemHash() {
 // VERIFY: f3281a6b manual
 // OFFSET: 0x00424780
 bool System_SFile2::FindFile(const char* name, char* path, uint32_t size, uint32_t flags, SFILE_TYPE* type, System_SFile::ARCHIVEREC** archive) {
+    int32_t gated = 0;
+    uint32_t* wxlType = reinterpret_cast<uint32_t*>(type);
+    void** wxlArchive = reinterpret_cast<void**>(archive);
+    if (wxl::seam::Storage::FindFile::Gate(&gated, &name, &path, &size, &flags, &wxlType, &wxlArchive)) {
+        return gated != 0;
+    }
+
     flags |= s_directAccess;
 
     if (archive) {

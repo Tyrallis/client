@@ -7,6 +7,7 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C2iVector.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00AD90B0
 uint8_t CBLPFile::s_eightBitAlphaLookup[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF };
@@ -98,6 +99,10 @@ int32_t CBLPFile::ValidateHeader(const BLPHeader& header) {
 // VERIFY: ec3a562c manual
 // OFFSET: 0x006AE900
 int32_t CBLPFile::Source(void* data) {
+    if (wxl::seam::Listening(WXL_EV_TextureDecode)) {
+        wxl::seam::BLPFile::Source::Before(this, data);
+    }
+
     this->Close();
 
     this->m_inMemoryNeedsFree = 0;
@@ -899,6 +904,10 @@ int32_t CBLPFile::Lock2(const char* fileName, PIXEL_FORMAT format, uint32_t mipL
 // VERIFY: 8d2086fa manual
 // OFFSET: 0x006AFF10
 int32_t CBLPFile::Open(const char* fileName, int32_t flags) {
+    if (wxl::seam::Listening(WXL_EV_TextureDecode)) {
+        wxl::seam::BLPFile::Open::Before(this, fileName, flags);
+    }
+
     if (!fileName) {
         DebugValidate("filename");
         SErrSetLastError(STORM_ERROR_INVALID_PARAMETER);

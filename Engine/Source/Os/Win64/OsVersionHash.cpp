@@ -217,7 +217,10 @@ static int32_t HashSection(IOsVersionHashCallback& callback, OsVersionHash& hash
     uint32_t address = section->VirtualAddress;
     uint32_t padding = ((size + alignment - 1) & ~(alignment - 1)) - size;
 
-    if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+    // A writable section counts as zeroes. So does one the loader maps without read access (a
+    // linker's metadata section with no access flags, such as lld-link's .retplne): reading it
+    // faults.
+    if ((section->Characteristics & IMAGE_SCN_MEM_WRITE) || !(section->Characteristics & IMAGE_SCN_MEM_READ)) {
         HashZeroes(callback, size + padding);
         return 1;
     }

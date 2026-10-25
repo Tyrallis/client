@@ -17,6 +17,7 @@
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
 #include "Engine/Source/Base/CDataStore.h"
 #include <cstring>
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00BFA688
 uint32_t CGLootInfo::m_itemsPending;
@@ -644,6 +645,7 @@ void CGLootInfo::LootButtonItemStatsCallback(int32_t id, const WOWGUID& guid, vo
 // VERIFY: 98edc3f9 manual
 // OFFSET: 0x005896B0
 void CGLootInfo::SetObject(CGObject_C* object, int32_t coins, LOOT_ACQUIRE lootAcquire) {
+    wxl::seam::Loot::SetObject::Before(object, coins, lootAcquire);
     if (CGLootInfo::m_lootObj) {
         CGObject_C* current = ClntObjMgrObjectPtr(CGLootInfo::m_lootObj, TYPE_OBJECT, __FILE__, __LINE__);
 
@@ -677,6 +679,7 @@ void CGLootInfo::SetObject(CGObject_C* object, int32_t coins, LOOT_ACQUIRE lootA
     }
 
     if (!object) {
+        wxl::seam::Loot::SetObject::After(object, coins, lootAcquire);
         return;
     }
 
@@ -715,6 +718,7 @@ void CGLootInfo::SetObject(CGObject_C* object, int32_t coins, LOOT_ACQUIRE lootA
     }
 
     if (CGLootInfo::m_itemsPending) {
+        wxl::seam::Loot::SetObject::After(object, coins, lootAcquire);
         return;
     }
 
@@ -725,11 +729,15 @@ void CGLootInfo::SetObject(CGObject_C* object, int32_t coins, LOOT_ACQUIRE lootA
     } else {
         FrameScript_SignalEvent(SCRIPT_EVENT_LOOT_OPENED, "%d", 0);
     }
+    wxl::seam::Loot::SetObject::After(object, coins, lootAcquire);
 }
 
 // VERIFY: 464fbb82 manual
 // OFFSET: 0x00589920
 void CGLootInfo::ClearSlot(uint8_t slot) {
+    if (wxl::seam::Listening(WXL_EV_LootSlotCleared)) {
+        wxl::seam::Loot::ClearSlot::Before(slot);
+    }
     uint32_t index = 0;
 
     while (!CGLootInfo::m_slots[index].m_itemID || CGLootInfo::m_slots[index].m_slot != slot) {

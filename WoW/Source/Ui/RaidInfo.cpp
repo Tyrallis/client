@@ -25,6 +25,7 @@
 #include "Engine/Source/Event/Event.h"
 #include "Engine/Source/lua-5.1/src/lua.h"
 #include "Engine/Source/FrameXML/LoadXML.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00BEB568
 CGRaidMember* CGRaidInfo::m_members[40];
@@ -90,6 +91,7 @@ void CGRaidInfo::UpdateRealStats(uint32_t count, WOWGUID leader) {
 // VERIFY: 7768a0f0 auto
 // OFFSET: 0x00572560
 int32_t Packet_MSG_RAID_READY_CHECK_FINISHED(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Raid::Packet_MSG_RAID_READY_CHECK_FINISHED::Before(param, msgId, time, msg);
     CGRaidInfo::m_readyCheckTime = 0;
     FrameScript_SignalEvent(SCRIPT_EVENT_READY_CHECK_FINISHED, "%b", 0);
     CGRaidInfo::m_readyCheckInitiator = WOWGUID();
@@ -430,6 +432,9 @@ int32_t Packet_MSG_RAID_TARGET_UPDATE(void* param, NETMESSAGE msgId, uint32_t ti
 // VERIFY: 9364bff5 manual
 // OFFSET: 0x005744F0
 int32_t Packet_MSG_RAID_READY_CHECK_CONFIRM(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_ReadyCheckResponse)) {
+        wxl::seam::Raid::Packet_MSG_RAID_READY_CHECK_CONFIRM::Before(param, msgId, time, msg);
+    }
     WOWGUID guid = WOWGUID();
     msg->Get(guid.m_guid);
     uint8_t ready = 0;
@@ -570,6 +575,7 @@ static void ReadyCheckNameCallback(int32_t id, const WOWGUID& guid, void* param,
 // VERIFY: a30fa835 auto
 // OFFSET: 0x00574D50
 int32_t Packet_MSG_RAID_READY_CHECK(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Raid::Packet_MSG_RAID_READY_CHECK::Before(param, msgId, time, msg);
     WOWGUID initiator;
     msg->Get(initiator.m_guid);
     CGRaidInfo::m_readyCheckInitiator = initiator;
