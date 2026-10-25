@@ -1,4 +1,5 @@
 #include "Login.h"
+#include "WarcraftXL/Seams.h"
 #include <cstring>
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/Storm/H/storm.h"
@@ -352,6 +353,7 @@ void LoginResponse::HandleRealmData(uint32_t result, CDataStore* msg) {
 // VERIFY: 21f14977 auto
 // OFFSET: 0x00465F10
 void Login::RealmListResult(CDataStore* msg) {
+    wxl::seam::Login::RealmListResult::Before(this, msg);
     if (!msg || msg->m_read == -1) {
         this->m_loginResponse->HandleRealmData(4, nullptr);
     } else {

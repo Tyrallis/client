@@ -1,4 +1,5 @@
 #include "ChatFrame.h"
+#include "WarcraftXL/Seams.h"
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -703,7 +704,8 @@ static void SendChatEvent(ChatChannel* channel, uint32_t language, const char* t
 
 // VERIFY: 4dbf06e6 manual
 // OFFSET: 0x004FDD80
-void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t a6, const char* channelName, uint32_t lineID, const CGPlayer_C* player) {
+void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, WOWGUID senderGuid, uint32_t senderUnk, uint32_t zoneChannelID, const char* channelName, uint32_t lineID, const CGPlayer_C* player) {
+    wxl::seam::Chat::RecordChat::Before(text, type, senderName, senderGuid.m_guid, senderUnk, zoneChannelID, channelName, lineID, player);
     if (!s_chatHistoryInitialized) {
         for (uint32_t i = 0; i < sizeof(CGChat::m_chatHistory) / sizeof(CGChat::m_chatHistory[0]); i++) {
             ChatRecord* record = &CGChat::m_chatHistory[i];
@@ -734,7 +736,7 @@ void CGChat::RecordChat(const char* text, int32_t type, const char* senderName, 
     record->m_type = type;
     record->m_senderGuid = senderGuid;
     record->m_senderUnk = senderUnk;
-    record->m_unk17B0 = a6;
+    record->m_unk17B0 = zoneChannelID;
 
     if (senderName) {
         SStrCopy(record->m_senderName, senderName, sizeof(record->m_senderName));
@@ -794,7 +796,7 @@ THROTTLEDCHAT::~THROTTLEDCHAT() {
 
 // VERIFY: f592c07c manual
 // OFFSET: 0x00502D00
-void CGChat::QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t a9, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
+void CGChat::QueueChatText(const char* text, int32_t type, const char* senderName, const char* targetName, uint32_t language, const char* channelName, const char* flags, int32_t queued, int32_t unused, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
     PENDINGCHAT* chat = CGChat::s_pendingChat.NewNode(2, 0, 0);
 
     chat->m_senderGuid = senderGuid;
@@ -805,7 +807,7 @@ void CGChat::QueueChatText(const char* text, int32_t type, const char* senderNam
     chat->m_targetName = targetName ? SStrDupA(targetName, __FILE__, __LINE__) : nullptr;
     chat->m_language = language;
     chat->m_queued = queued;
-    chat->unused_0030 = a9;
+    chat->unused_0030 = unused;
     chat->m_achievementID = achievementID;
     chat->m_isGM = isGM;
     chat->m_conversation = conversation ? new (SMemAlloc(sizeof(ChatConversation), __FILE__, __LINE__, 0)) ChatConversation(*conversation) : nullptr;
@@ -823,6 +825,8 @@ void CGChat::QueueChatText(const char* text, int32_t type, const char* senderNam
     } else {
         chat->m_flags[0] = 0;
     }
+
+    wxl::seam::Chat::QueueChatText::After(text, type, senderName, targetName, language, channelName, flags, queued, unused, senderGuid.m_guid, senderUnk, targetGuid.m_guid, achievementID, isGM, conversation);
 }
 
 // VERIFY: 5382bfae auto
@@ -1033,6 +1037,7 @@ bool SpamFilter(char* text, bool cache) {
 // VERIFY: 812184e4 manual
 // OFFSET: 0x00509DD0
 void CGChat::AddChatMessage(const char* text, int32_t type, const char* senderName, uint32_t language, const char* channelName, const char* targetName, const char* flags, WOWGUID senderGuid, uint32_t senderUnk, WOWGUID targetGuid, int32_t achievementID, bool isGM, const ChatConversation* conversation) {
+    wxl::seam::Chat::AddChatMessage::Before(text, type, senderName, language, channelName, targetName, flags, senderGuid.m_guid, senderUnk, targetGuid.m_guid, achievementID, isGM, conversation);
     if (type >= CHAT_MSG_MAX) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
@@ -1151,7 +1156,7 @@ void CGChat::AddChatMessage(const char* text, int32_t type, const char* senderNa
     }
 
     if (type == CHAT_MSG_SAY || type == CHAT_MSG_YELL || type == CHAT_MSG_PARTY || type == CHAT_MSG_PARTY_LEADER) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(senderGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(senderGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit && !(unit->m_unit->m_unitFieldFlags & 0x20000000)) {
             char token[32];
@@ -1165,22 +1170,22 @@ void CGChat::AddChatMessage(const char* text, int32_t type, const char* senderNa
                 }
 
                 if (!SStrCmpUTF8I(word, text, STORM_MAX_STR)) {
-                    unit->RequestTalkEmote(4);
+                    unit->RequestTalkEmote(TALKANIM_LAUGH);
                     goto emoteDone;
                 }
             }
 
             if (type == CHAT_MSG_SAY || type == CHAT_MSG_YELL) {
-                int32_t animation = 0;
+                TALKANIMATION animation = TALKANIM_TALK;
                 uint32_t length = SStrLen(text);
 
                 if (type == CHAT_MSG_YELL) {
-                    animation = 3;
+                    animation = TALKANIM_SHOUT;
                 } else if (length) {
                     if (text[length - 1] == '?') {
-                        animation = 1;
+                        animation = TALKANIM_QUESTION;
                     } else if (text[length - 1] == '!') {
-                        animation = 2;
+                        animation = TALKANIM_EXCLAMATION;
                     }
                 }
 
@@ -1308,7 +1313,7 @@ emoteDone:
         CGLCD::OnWhisper(senderName);
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(senderGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(senderGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         const char* bubble = translated;
@@ -1483,6 +1488,7 @@ emoteDone:
 // VERIFY: 71191980 manual
 // OFFSET: 0x0050BE70
 int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
+    wxl::seam::Chat::ChatMessageReceived::Before(msg, isGM);
     char channelName[128];
     memset(channelName, 0, sizeof(channelName));
 
@@ -1490,7 +1496,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
     const char* targetName = nullptr;
     uint8_t chatTag = 0;
     const char* flags = "";
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     uint32_t achievementID = 0;
     WOWGUID senderGuid = WOWGUID();
     uint32_t senderUnk = 0;
@@ -1532,6 +1538,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             msg->Get(chatTag);
 
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(targetGuid, true)) {
+                wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                 return 1;
             }
 
@@ -1549,6 +1556,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             msg->Get(chatTag);
 
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(senderGuid, true)) {
+                wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                 return 1;
             }
 
@@ -1621,6 +1629,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             if ((type == CHAT_MSG_WHISPER || type == CHAT_MSG_BATTLENET) && (chatTag & 0x8) && !(chatTag & 0x4) && language != 0xFFFFFFFF) {
                 if ((!player || senderGuid != player->m_obj->m_guid) && (!FriendList::s_friendList || !FriendList::s_friendList->IsFriend(senderGuid)) && !CGChat::IsInWhisperHistory(senderGuid)) {
                     CGChat::SendIgnoredResponse(senderGuid, 1);
+                    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                     return 1;
                 }
             }
@@ -1628,6 +1637,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
             if (FriendList::s_friendList && FriendList::s_friendList->IsIgnored(senderGuid, true) && !(chatTag & 0x4)) {
                 if (type == CHAT_MSG_WHISPER) {
                     if (language == 0xFFFFFFFF) {
+                        wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                         return 1;
                     }
 
@@ -1635,6 +1645,7 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
                 }
 
                 if (type != CHAT_MSG_WHISPER_INFORM && type != CHAT_MSG_IGNORED && type != CHAT_MSG_RESTRICTED) {
+                    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
                     return 1;
                 }
             }
@@ -1645,10 +1656,12 @@ int32_t CGChat::ChatMessageReceived(CDataStore* msg, bool isGM) {
 
     if (!msg->IsRead()) {
         msg->Reset();
+        wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
         return 1;
     }
 
     CGChat::AddChatMessage(text, type, senderName, language, channelName, targetName, flags, senderGuid, senderUnk, targetGuid, achievementID, isGM, nullptr);
+    wxl::seam::Chat::ChatMessageReceived::After(1, msg, isGM);
     return 1;
 }
 
@@ -1734,7 +1747,7 @@ bool ChatParserParseText(const char* text, char* buffer, uint32_t size) {
                     const char* name = nullptr;
 
                     if (focus) {
-                        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(focus, TYPEMASK_UNIT, __FILE__, __LINE__));
+                        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(focus, TYPE_UNIT, __FILE__, __LINE__));
 
                         if (unit) {
                             name = unit->GetUnitName(nullptr, 1);
@@ -1761,7 +1774,7 @@ bool ChatParserParseText(const char* text, char* buffer, uint32_t size) {
                     const char* name = nullptr;
 
                     if (target) {
-                        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+                        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
                         if (unit) {
                             name = unit->GetUnitName(nullptr, 1);
@@ -2012,7 +2025,7 @@ void CGChat::TranslateMessage(uint32_t language, uint32_t skill, const char* tex
         return;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__) || skill >= 300) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__) || skill >= 300) {
         SStrCopy(buffer, text, size);
         return;
     }
@@ -2972,13 +2985,13 @@ void CGChat::InitializeGame() {
 void CGChat::OnLogXPGain(int32_t amount) {
     char text[3000];
     SStrPrintf(text, sizeof(text), FrameScript_GetText("COMBATLOG_XPLOSS_FIRSTPERSON_UNNAMED", -1, GENDER_NOT_APPLICABLE), -amount);
-    CGChat::AddChatMessage(text, 33, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
+    CGChat::AddChatMessage(text, CHAT_MSG_COMBAT_XP_GAIN, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
 }
 
 // VERIFY: d2c71361 manual
 // OFFSET: 0x0050B0F0
 void CGChat::InformTargetIcon(WOWGUID setter, WOWGUID target, int32_t index) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -2995,7 +3008,7 @@ void CGChat::InformTargetIcon(WOWGUID setter, WOWGUID target, int32_t index) {
     if (name) {
         char buffer[3000];
         SStrPrintf(buffer, sizeof(buffer), FrameScript_GetText("TARGET_ICON_SET", -1, GENDER_NOT_APPLICABLE), name->m_name, name->m_name, index + 1, unitName);
-        CGChat::AddChatMessage(buffer, 52, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
+        CGChat::AddChatMessage(buffer, CHAT_MSG_TARGETICONS, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
     }
 }
 
@@ -3005,7 +3018,7 @@ static void UnitCombatLogShowXPGained(CGUnit_C* unit, int32_t amount, float grou
     char text[3000];
     int32_t base = static_cast<int32_t>(amount / groupMult);
 
-    if (unit && (unit->m_obj->m_type & TYPEMASK_UNIT)) {
+    if (unit && (unit->m_obj->m_type & TYPE_UNIT)) {
         if (base == amount) {
             SStrPrintf(text, sizeof(text), FrameScript_GetText("COMBATLOG_XPGAIN_FIRSTPERSON", -1, GENDER_NOT_APPLICABLE), unit->GetUnitName(nullptr, 1), amount);
         } else {
@@ -3019,7 +3032,7 @@ static void UnitCombatLogShowXPGained(CGUnit_C* unit, int32_t amount, float grou
         SStrPrintf(text, sizeof(text), FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE), amount, abs(amount - base));
     }
 
-    CGChat::AddChatMessage(text, 33, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
+    CGChat::AddChatMessage(text, CHAT_MSG_COMBAT_XP_GAIN, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
 }
 
 // STATIC: 0x00AC7FB4
@@ -3028,7 +3041,7 @@ static const char* s_exhaustionTokens[7] = { nullptr, "COMBATLOG_XPGAIN_EXHAUSTI
 // VERIFY: 610143a3 manual
 // OFFSET: 0x0050B300
 void CGChat::LogXPGain(CGUnit_C* unit, int32_t amount, int32_t type, int32_t bonus, float groupMult, bool referAFriend) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->AddWorldXPGainText(amount);
@@ -3073,7 +3086,7 @@ void CGChat::LogXPGain(CGUnit_C* unit, int32_t amount, int32_t type, int32_t bon
                 SStrPrintf(text, sizeof(text), FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE), unit->GetUnitName(nullptr, 1), amount, bonusText, exhaustion->m_name, abs(bonus - base));
             }
 
-            CGChat::AddChatMessage(text, 33, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
+            CGChat::AddChatMessage(text, CHAT_MSG_COMBAT_XP_GAIN, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
             return;
         }
 
@@ -3092,12 +3105,13 @@ void CGChat::LogXPGain(CGUnit_C* unit, int32_t amount, int32_t type, int32_t bon
     ExhaustionRec* exhaustion = g_exhaustionDB.GetRecord(6);
     char text[3000];
     SStrPrintf(text, sizeof(text), FrameScript_GetText("COMBATLOG_XPGAIN_QUEST", -1, GENDER_NOT_APPLICABLE), amount, bonusText, exhaustion->m_name, rafBonus);
-    CGChat::AddChatMessage(text, 33, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
+    CGChat::AddChatMessage(text, CHAT_MSG_COMBAT_XP_GAIN, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
 }
 
 // VERIFY: 294836e5 manual
 // OFFSET: 0x0050C720
 int32_t Packet_SMSG_LOG_XPGAIN(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    wxl::seam::Chat::Packet_SMSG_LOG_XPGAIN::Before(param, msgId, time, msg);
     WOWGUID guid = WOWGUID();
     msg->Get(guid.m_guid);
     uint32_t amount = 0;
@@ -3114,7 +3128,7 @@ int32_t Packet_SMSG_LOG_XPGAIN(void* param, NETMESSAGE msgId, uint32_t time, CDa
 
     uint8_t referAFriend = 0;
     msg->Get(referAFriend);
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (guid == ClntObjMgrGetActivePlayer()) {
         CGChat::OnLogXPGain(amount);
@@ -3225,7 +3239,7 @@ void CGChat::AddTextEmoteMessage(const WOWGUID& guid, uint32_t emote, const char
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -3311,7 +3325,7 @@ void CGChat::AddTextEmoteMessage(const WOWGUID& guid, uint32_t emote, const char
         }
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->PlayTextEmoteSound(emote, emoteNum);
@@ -3443,6 +3457,7 @@ const char* CGChat::GetChannelStringForDisplay(int32_t session, int32_t* type) {
 // VERIFY: 5db308f7 manual
 // OFFSET: 0x00501710
 PENDINGCHAT::~PENDINGCHAT() {
+    wxl::seam::Chat::DestroyPendingChat::Before(this);
     if (this->m_text) {
         SMemFree(this->m_text, __FILE__, __LINE__, 0);
     }
@@ -3623,7 +3638,7 @@ void SetCurrentActiveDisplayChannel(const char* name, int32_t type) {
 // VERIFY: 0d38fbc2 manual
 // OFFSET: 0x005045C0
 uint32_t BuildPartyDisplayList() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -3659,7 +3674,7 @@ uint32_t BuildPartyDisplayList() {
 // VERIFY: c259157e manual
 // OFFSET: 0x00504720
 uint32_t BuildRaidDisplayList(int32_t type) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -4034,7 +4049,7 @@ void CGChat::ProcessPendingChatQueue() {
 // VERIFY: d5d65c21 manual
 // OFFSET: 0x0050DF80
 void CGChat::EnterWorld() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     CGChat::m_afk = player && (player->m_player->m_playerFlags & 0x2) ? 1 : 0;
     s_queueChat = 0;
     CGChat::ProcessPendingChatQueue();
@@ -4042,14 +4057,14 @@ void CGChat::EnterWorld() {
 
 // VERIFY: bff5dc80 manual
 // OFFSET: 0x0050BA10
-void CGChat::LogReactionChanged(int32_t faction, int32_t reaction) {
+void CGChat::LogReactionChanged(int32_t faction, UNIT_REACTION reaction) {
     FactionRec* rec = g_factionDB.GetRecord(faction);
 
     if (!rec) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -4371,7 +4386,7 @@ void CGChat::UpdateGuildStatus() {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || !FindGuildRecruitmentChannel()) {
         return;
@@ -5849,7 +5864,7 @@ void CGChat::SilencePartyMember(bool silence, const char* name) {
         return;
     }
 
-    WOWGUID guid = CGGameUI::ClosestObjectMatch(name, TYPEMASK_PLAYER, CGRaidInfo::m_numMembers ? 6 : 5, 0, 3.4028235e38f, 0);
+    WOWGUID guid = CGGameUI::ClosestObjectMatch(name, TYPE_PLAYER, CGRaidInfo::m_numMembers ? 6 : 5, 0, 3.4028235e38f, 0);
 
     if (!guid) {
         CGGameUI::DisplayError(ERR_TARGET_NOT_IN_GROUP_S, name);
@@ -6087,7 +6102,7 @@ void CGChat::LogHonorGain(CGUnit_C* unit, const WOWGUID& victim, int32_t rank, i
         return;
     }
 
-    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(victim, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(victim, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!target || honor <= 0) {
         return;
@@ -6209,7 +6224,7 @@ int32_t CGChat::OnTitleEarned(void* param, NETMESSAGE msgId, uint32_t time, CDat
         void* memory = SMemAlloc(sizeof(CEffect), __FILE__, __LINE__, 0);
         CEffect* effect = memory ? new (memory) CEffect() : nullptr;
         WOWGUID guid = player->m_obj->m_guid;
-        effect->AddSpecialEffect(9, guid, CGObject_C::EffectOnceHandler);
+        effect->AddSpecialEffect(SPECIALEFFECT_REPUTATION, guid, CGObject_C::EffectOnceHandler);
         effect->m_flags |= 0x20;
         effect->Release();
         SStrPrintf(text, sizeof(text), FrameScript_GetText("NEW_TITLE_EARNED", -1, GENDER_NOT_APPLICABLE), name);
@@ -6313,16 +6328,16 @@ void CombatLog::GetSpellLogLinkInfo(const WOWGUID& source, const WOWGUID& dest, 
         return;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(dest, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(dest, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return;
     }
 
-    if (object->m_obj->m_type & TYPEMASK_ITEM) {
+    if (object->m_obj->m_type & TYPE_ITEM) {
         ItemStats_C* stats = g_itemDBCache.GetRecord(object->m_obj->m_entryID, WOWGUID(), nullptr, nullptr, false);
         CGChat::LogOpenLock(source, &spell, stats);
-    } else if (object->m_obj->m_type & TYPEMASK_GAMEOBJECT) {
+    } else if (object->m_obj->m_type & TYPE_GAMEOBJECT) {
         GameObjectStats_C* stats = g_gameObjectDBCache.GetRecord(object->m_obj->m_entryID, WOWGUID(), nullptr, nullptr, false);
         CGChat::LogOpenLock(source, &spell, stats);
     }

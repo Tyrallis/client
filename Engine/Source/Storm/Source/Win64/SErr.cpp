@@ -14,6 +14,7 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Storm/Source/MachineState.h"
+#include "WarcraftXL/Seams.h"
 
 #define STORM_FACILITY 0x510
 #define SERR_STRING_BASE 0x5100
@@ -626,6 +627,8 @@ int32_t STORMAPI SErrDestroy() {
 
 // OFFSET: 0x00771D10
 int32_t STORMAPI SErrDisplayError(uint32_t errorcode, const char* filename, int32_t linenumber, const char* description, int32_t recoverable, uint32_t exitcode, uint32_t unknown) {
+    wxl::seam::Storm::SErrDisplayError::Before(errorcode, filename, linenumber, description, recoverable, exitcode, unknown);
+
     // STATIC: 0x00CAE934
     static int32_t lastlinenumber;
     // STATIC: 0x00CAE938

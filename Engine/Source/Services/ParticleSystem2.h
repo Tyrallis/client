@@ -68,7 +68,24 @@ class CSortableParticleQueue : public CMemBlock {
 };
 
 class CParticleEmitter2 {
+    protected:
+    static const float VEL_UPDATE_TIME;
+    static const float MIN_ZSOURCE;
+
     public:
+    enum PARTICLE_EMITTER_TYPE : int32_t {
+        PET_BASE_EMITTER = 0,
+        PET_PLANE_EMITTER = 1,
+        PET_SPHERE_EMITTER = 2,
+        PET_SPLINE_EMITTER = 3,
+        PET_NUMS_PETS = 4,
+    };
+
+    enum PARTICLE_TYPE : uint32_t {
+        PT_QUAD = 0,
+        PT_MODEL = 1,
+    };
+
     struct ParticleVertex {
         /* 0000 */ uint8_t* m_position;
         /* 0004 */ uint8_t* m_normal;
@@ -148,7 +165,7 @@ class CParticleEmitter2 {
     /* 0014 */ float m_textureCellHeight;
     /* 0018 */ uint32_t m_priorityPlane;
     /* 001C */ uint32_t m_renderedParticles;
-    /* 0020 */ int32_t m_emitterType;
+    /* 0020 */ PARTICLE_EMITTER_TYPE m_emitterType;
     /* 0024 */ CRndSeed m_random;
     /* 002C */ TSGrowableArray<CParticle2> m_particles;
     /* 003C */ TSGrowableArray<CParticle2_Model> m_particleModels;

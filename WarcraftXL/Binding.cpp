@@ -7,11 +7,19 @@
 #include <vector>
 
 #include "Engine/Source/Base/CDataStore.h"
+#include "Engine/Source/Base/SIMD.h"
+#include "Engine/Source/Model2/M2Shared.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
+#include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/MPQGlobals.h"
+#include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
+#include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/SFileArchives.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
 #include "Engine/Source/Gx/CGxDeviceD3d/CGxDeviceD3d.h"
 #include "Engine/Source/Gx/CGxDeviceD3d9Ex/CGxDeviceD3d9Ex.h"
+#include "Engine/Source/Gx/CGxPool.h"
+#include "Engine/Source/Gx/CGxTex.h"
+#include "Engine/Source/SoundEngine/fmodex/src/fmod.h"
 #include "Engine/Source/Gx/Gx.h"
 #include "Engine/Source/Model2/CM2SceneRender.h"
 #include "Engine/Source/Model2/M2Model.h"
@@ -44,13 +52,48 @@
 #include "WoW/Source/Object/ObjectClient/VisibleItem_C.h"
 #include "WoW/Source/Object/Player.h"
 #include "WoW/Source/Object/Unit.h"
+#include "WoW/Source/DB/DBClient/DBClient.h"
+#include "WoW/Source/Glue/CGlueMgr.h"
+#include "WoW/Source/WowServices/Login.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
+#include "WoW/Source/Object/MovementShared.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
+#include "WoW/Source/Ui/ChatFrame.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
+#include "WoW/Source/WorldClient/MapDoodadDef.h"
+#include "WoW/Source/WorldClient/MapObj.h"
 #include "WoW/Source/WorldClient/World.h"
+#include "wxl/core/gpu.hpp"
+#include "wxl/core/storm.hpp"
 #include "wxl/events.h"
+#include "wxl/objects/fields.hpp"
 #include "wxl/services/script.h"
+
+// The SDK's update-field table describes these blocks: each kind's fields end where the client's
+// descriptor block for it does, and a player other than the active one keeps CGPlayerData only.
+// core/tools/fields/generate_update_fields.py writes the table from this fork and checks it
+// whole; these hold its block sizes to the structs this build compiles.
+#define WXL_UPDATE_FIELD(kind, NAME, Name, index, size, value, flags, watch)
+#define WXL_UPDATE_FIELD_KIND(kind, type, parent, first, end, others_end) \
+    constexpr uint32_t kFieldsOf##kind[3] = { first, end, others_end };
+#include "wxl/update_fields.def"
+#undef WXL_UPDATE_FIELD_KIND
+#undef WXL_UPDATE_FIELD
+static_assert(sizeof(CGObjectData) == (kFieldsOfObject[1] - kFieldsOfObject[0]) * 4, "CGObjectData");
+static_assert(sizeof(CGItemData) == (kFieldsOfItem[1] - kFieldsOfItem[0]) * 4, "CGItemData");
+static_assert(sizeof(CGContainerData) == (kFieldsOfContainer[1] - kFieldsOfContainer[0]) * 4, "CGContainerData");
+static_assert(sizeof(CGUnitData) == (kFieldsOfUnit[1] - kFieldsOfUnit[0]) * 4, "CGUnitData");
+static_assert(sizeof(CGPlayerLocalData) == (kFieldsOfPlayer[1] - kFieldsOfPlayer[0]) * 4, "CGPlayerLocalData");
+static_assert(sizeof(CGPlayerData) == (kFieldsOfPlayer[2] - kFieldsOfPlayer[0]) * 4, "CGPlayerData");
+static_assert(sizeof(CGGameObjectData) == (kFieldsOfGameObject[1] - kFieldsOfGameObject[0]) * 4, "CGGameObjectData");
+static_assert(sizeof(CGDynamicObjectData) == (kFieldsOfDynamicObject[1] - kFieldsOfDynamicObject[0]) * 4,
+              "CGDynamicObjectData");
+static_assert(sizeof(CGCorpseData) == (kFieldsOfCorpse[1] - kFieldsOfCorpse[0]) * 4, "CGCorpseData");
+static_assert(offsetof(CGUnitData, m_unitFieldHealth) == (wxl::field::Unit::Health.index - kFieldsOfUnit[0]) * 4 &&
+                  offsetof(CGPlayerData, m_playerChosenTitle) ==
+                      (wxl::field::Player::ChosenTitle.index - kFieldsOfPlayer[0]) * 4,
+              "UNIT_FIELD_HEALTH and PLAYER_CHOSEN_TITLE where update_fields.def puts them");
 
 // The contract numbers object types exactly as the client does, so a type id crosses as is.
 static_assert(ID_OBJECT == WXL_OBJECT_UNKNOWN && ID_ITEM == WXL_OBJECT_ITEM && ID_CONTAINER == WXL_OBJECT_CONTAINER
@@ -83,6 +126,22 @@ namespace {
 
     lua_State* State(void* state) {
         return static_cast<lua_State*>(state);
+    }
+
+    // The runtime's mirror handler, called from the client's own MIRRORHANDLERFUNC: the guid
+    // crosses as its 64 bits. The runtime sets one handler for every field it watches.
+    wxl_core_mirror_fn s_mirror = nullptr;
+
+    int32_t ForwardMirror(WOWGUID guid, uint32_t offset, uint32_t size, const void* oldValue, void* param) {
+        return s_mirror ? s_mirror(guid.m_guid, offset, size, oldValue, param) : 0;
+    }
+
+    bool TakeMirror(wxl_core_mirror_fn handler) {
+        if (!handler || (s_mirror && s_mirror != handler)) {
+            return false;
+        }
+        s_mirror = handler;
+        return true;
     }
 
     // A member as a binding row answers it: a guid as its 64 bits, a byte array as the integer it
@@ -160,6 +219,48 @@ namespace WarcraftXL::Binding {
         return ClntObjMgrGetActivePlayerObj();
     }
 
+    const void* WXL_CALL object_by_guid(uint64_t guid) {
+        return ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPE_OBJECT, __FILE__, __LINE__);
+    }
+
+    wxl_bool WXL_CALL object_watch_type(uint32_t type, uint32_t offset, uint32_t size, wxl_core_mirror_fn handler,
+                                        void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !TakeMirror(handler)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrSetTypeMirrorHandler(static_cast<OBJECT_TYPE_ID>(type), offset, size, &ForwardMirror, param,
+                                       static_cast<HANDLER_PRIORITY>(0), 0);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL object_watch_one(uint64_t guid, uint32_t type, uint32_t offset, uint32_t size,
+                                       wxl_core_mirror_fn handler, void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !object_by_guid(guid) || !TakeMirror(handler)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrSetObjMirrorHandler(WOWGUID{ guid }, static_cast<OBJECT_TYPE_ID>(type), offset, size, &ForwardMirror,
+                                      param, static_cast<HANDLER_PRIORITY>(0), 0);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL object_unwatch_type(uint32_t type, uint32_t offset, wxl_core_mirror_fn handler, void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !handler || handler != s_mirror) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrUnsetTypeMirrorHandler(static_cast<OBJECT_TYPE_ID>(type), offset, &ForwardMirror, param);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL object_unwatch_one(uint64_t guid, uint32_t type, uint32_t offset, wxl_core_mirror_fn handler,
+                                         void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !handler || handler != s_mirror || !object_by_guid(guid)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrUnsetObjMirrorHandler(WOWGUID{ guid }, static_cast<OBJECT_TYPE_ID>(type), offset, &ForwardMirror,
+                                        param);
+        return WXL_TRUE;
+    }
+
     // --- object.def -----------------------------------------------------------------------------
 
     wxl_bool WXL_CALL object_position(const void* object, wxl_vec3* out) {
@@ -219,6 +320,22 @@ namespace WarcraftXL::Binding {
 
     uint8_t WXL_CALL ui_logging_in(void) {
         return CGGameUI::m_loggingIn;
+    }
+
+    // --- glue.def -------------------------------------------------------------------------------
+
+    const char* WXL_CALL glue_current_screen(void) {
+        return CGlueMgr::m_currentScreen;
+    }
+
+    int32_t WXL_CALL login_server_type(const void* login) {
+        return login ? const_cast<Login*>(static_cast<const Login*>(login))->GetLoginServerType() : -1;
+    }
+
+    // --- chat.def -------------------------------------------------------------------------------
+
+    const void* WXL_CALL chat_pending_last(void) {
+        return CGChat::s_pendingChat.Tail();
     }
 
     // --- script.def -----------------------------------------------------------------------------
@@ -355,10 +472,10 @@ namespace WarcraftXL::Binding {
             return WXL_FALSE;
         }
         int32_t high = static_cast<int32_t>(offset >> 32);
-        // Method 0 is FILE_BEGIN: the offset is absolute, which is what read_at means.
-        return SFile::SetFilePointer(File(file), static_cast<int32_t>(offset & 0xFFFFFFFFu), &high, 0)
-                   ? WXL_TRUE
-                   : WXL_FALSE;
+        // Method 0 is FILE_BEGIN: the offset is absolute, which is what read_at means. The answer
+        // is the cursor afterwards, 0 for a seek to the start.
+        const int32_t at = SFile::SetFilePointer(File(file), static_cast<int32_t>(offset & 0xFFFFFFFFu), &high, 0);
+        return wxl::core::storm::SeekLanded(static_cast<uint32_t>(at), offset) ? WXL_TRUE : WXL_FALSE;
     }
 
     uint32_t WXL_CALL file_read(void* file, void* buffer, uint32_t count) {
@@ -379,6 +496,31 @@ namespace WarcraftXL::Binding {
     wxl_bool WXL_CALL archive_mount(const char* path, int32_t priority) {
         SArchive* archive = nullptr;
         return path && SFile::OpenArchive(path, priority, 0, &archive) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    const char* WXL_CALL storage_base_path() {
+        return SFile::m_basePath;
+    }
+
+    uint32_t WXL_CALL archive_list(wxl_core_name_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        // The records first: the listing opens files, which may reach the set.
+        std::vector<System_SFile::ARCHIVEREC*> records;
+        for (System_SFile::ARCHIVEREC* record : *System_MPQGlobals::GetArchiveList()) {
+            records.push_back(record);
+        }
+        uint32_t listed = 0;
+        for (System_SFile::ARCHIVEREC* record : records) {
+            SArchive archive = {};
+            archive.m_type = SARCHIVE_MPQ;
+            archive.m_archive = record;
+            if (record && SFile::List(&archive, fn, user)) {
+                ++listed;
+            }
+        }
+        return listed;
     }
 
     // --- Gx ---------------------------------------------------------------------------------
@@ -819,6 +961,198 @@ namespace WarcraftXL::Binding {
         return WXL_TRUE;
     }
 
+    // --- Memory -----------------------------------------------------------------------------
+    // Each row walks the client's own lists, as wxl.footprint asks on the main thread.
+
+    uint32_t WXL_CALL gx_resources(wxl_core_gpu_fn fn, void* user) {
+        CGxDevice* device = g_theGxDevicePtr;
+        if (!fn || !device || (device->m_api != GxApi_D3d9 && device->m_api != GxApi_D3d9Ex)) {
+            return 0;
+        }
+        uint32_t told = 0;
+        // A texture waiting to be created again holds a placeholder, not its texture.
+        for (CGxTex* texture = device->m_textures.Head(); texture; texture = device->m_textures.Next(texture)) {
+            wxl_core_gpu_resource resource = {};
+            if (!texture->m_needsCreation && texture->m_apiSpecificData &&
+                wxl::core::gpu::DescribeTexture(static_cast<IDirect3DBaseTexture9*>(texture->m_apiSpecificData), &resource)) {
+                fn(&resource, user);
+                ++told;
+            }
+        }
+        for (CGxPool* pool = device->m_poolList.Head(); pool; pool = device->m_poolList.Next(pool)) {
+            wxl_core_gpu_resource resource = {};
+            if (pool->m_apiSpecific &&
+                wxl::core::gpu::DescribeBuffer(static_cast<IDirect3DResource9*>(pool->m_apiSpecific), &resource)) {
+                fn(&resource, user);
+                ++told;
+            }
+        }
+        return told;
+    }
+
+    wxl_bool WXL_CALL sound_heap(uint64_t* current, uint64_t* peak) {
+        int now = 0;
+        int most = 0;
+        if (!current || !peak || FMOD_Memory_GetStats(&now, &most) != FMOD_OK) {
+            return WXL_FALSE;
+        }
+        *current = static_cast<uint32_t>(now);
+        *peak = static_cast<uint32_t>(most);
+        return WXL_TRUE;
+    }
+
+    uint64_t WXL_CALL script_heap() {
+        lua_State* L = FrameScript_GetContext();
+        if (!L) {
+            return 0;
+        }
+        return static_cast<uint64_t>(lua_gc(L, LUA_GCCOUNT, 0)) * 1024u + static_cast<uint64_t>(lua_gc(L, LUA_GCCOUNTB, 0));
+    }
+
+    namespace {
+        template <class T>
+        uint64_t Reserved(const std::vector<T>& vector) {
+            return static_cast<uint64_t>(vector.capacity()) * sizeof(T);
+        }
+
+        uint64_t PackedBytes(const System_SFile::BitPacked* bits) {
+            return bits ? (static_cast<uint64_t>(bits->m_bitCount) + 7) / 8 + sizeof(*bits) : 0;
+        }
+
+        void Describe(const System_SFile::ARCHIVEREC* rec, wxl_core_archive* out) {
+            out->path = wxl::core::storm::ArchiveName(rec->m_name, rec->m_directPath.c_str());
+            out->priority = rec->m_priority;
+            out->hash_entries = rec->m_header.m_hashTableSize;
+            out->block_entries = rec->m_header.m_blockTableSize;
+            uint64_t bytes = Reserved(rec->m_hashTable) + Reserved(rec->m_blockTable);
+            if (const System_SFile::BlockEntryTable* blocks = rec->m_blockEntryTable) {
+                bytes += sizeof(*blocks) + Reserved(blocks->m_flagTable) + Reserved(blocks->m_fileTimes) +
+                         Reserved(blocks->m_crcs) + Reserved(blocks->m_md5s) + PackedBytes(blocks->m_hashes) +
+                         PackedBytes(blocks->m_entries);
+            }
+            if (const System_SFile::HashEntryTable* hashes = rec->m_hashEntryTable) {
+                bytes += sizeof(*hashes) + hashes->m_slotCount + PackedBytes(hashes->m_indices);
+            }
+            // A listfile name: a node of the map, and the name's own block when it outgrows the string.
+            for (const auto& name : rec->m_listfile) {
+                bytes += sizeof(name) + 4 * sizeof(void*) + (name.first.capacity() > 15 ? name.first.capacity() + 1 : 0);
+            }
+            out->bytes = bytes;
+        }
+    }
+
+    uint32_t WXL_CALL archive_tables(wxl_core_archive_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        uint32_t told = 0;
+        for (System_SFile::ARCHIVEREC* record : *System_MPQGlobals::GetArchiveList()) {
+            if (!record) {
+                continue;
+            }
+            wxl_core_archive archive = {};
+            Describe(record, &archive);
+            fn(&archive, user);
+            ++told;
+        }
+        return told;
+    }
+
+    wxl_bool WXL_CALL archive_of(void* archive, wxl_core_archive* out) {
+        const SArchive* handle = static_cast<const SArchive*>(archive);
+        if (!handle || !out || handle->m_type != SARCHIVE_MPQ || !handle->m_archive) {
+            return WXL_FALSE;
+        }
+        Describe(handle->m_archive, out);
+        return WXL_TRUE;
+    }
+
+    namespace {
+        template <class Rec>
+        void TellDb(const WowClientDB<Rec>& store, const char* file, wxl_core_db_fn fn, void* user) {
+            const uint64_t records = store.m_numRecords > 0 ? static_cast<uint64_t>(store.m_numRecords) : 0;
+            const uint64_t ids = records && store.m_maxID >= store.m_minID ? static_cast<uint64_t>(store.m_maxID - store.m_minID) + 1 : 0;
+            wxl_core_db db = {};
+            db.file = file;
+            db.loaded = store.m_loaded ? WXL_TRUE : WXL_FALSE;
+            db.records = static_cast<uint32_t>(records);
+            db.record_size = sizeof(Rec);
+            db.blocks[0] = store.m_records;
+            db.estimates[0] = records * sizeof(Rec);
+            db.blocks[1] = store.m_strings;
+            db.blocks[2] = store.m_recordsById;
+            db.estimates[2] = ids * sizeof(Rec*);
+            fn(&db, user);
+        }
+
+        template <class Rec>
+        void TellDb(const WowClientDB_RLE<Rec>& store, const char* file, wxl_core_db_fn fn, void* user) {
+            const uint64_t records = store.m_numRecords > 0 ? static_cast<uint64_t>(store.m_numRecords) : 0;
+            const uint64_t ids = records && store.m_maxID >= store.m_minID ? static_cast<uint64_t>(store.m_maxID - store.m_minID) + 1 : 0;
+            wxl_core_db db = {};
+            db.file = file;
+            db.loaded = store.m_loaded ? WXL_TRUE : WXL_FALSE;
+            db.records = static_cast<uint32_t>(records);
+            db.record_size = sizeof(Rec);
+            db.blocks[0] = store.m_data;
+            db.estimates[0] = records * sizeof(Rec);
+            db.blocks[1] = store.m_strings;
+            // The row pointers, and the index by id after them in the same block.
+            db.blocks[2] = store.m_records;
+            db.estimates[2] = (records + ids) * sizeof(Rec*);
+            fn(&db, user);
+        }
+    }
+
+    uint32_t WXL_CALL client_dbs(wxl_core_db_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        uint32_t told = 0;
+#define WXL_CLIENT_DB(global, Rec, store, file, row_size) \
+    TellDb(global, file, fn, user);                        \
+    ++told;
+#include "wxl/core/client_dbs.def"
+#undef WXL_CLIENT_DB
+        return told;
+    }
+
+    // --- Asset: models, map objects, doodads (asset.def) -------------------------------------
+
+    const char* WXL_CALL model_path(const void* shared) {
+        return shared ? static_cast<const CM2Shared*>(shared)->m_fileName : nullptr;
+    }
+
+    const void* WXL_CALL model_bytes(const void* shared, uint32_t* size) {
+        if (!shared) {
+            return nullptr;
+        }
+        const CM2Shared* model = static_cast<const CM2Shared*>(shared);
+        if (size) {
+            *size = model->m_fileSize;
+        }
+        return model->m_data;
+    }
+
+    wxl_bool WXL_CALL model_replace_bytes(void* shared, const void* bytes, uint32_t size) {
+        if (!shared || !bytes || !size) {
+            return WXL_FALSE;
+        }
+        void* copy = SIMD::AllocA16(size, __FILE__, __LINE__);
+        if (!copy) {
+            return WXL_FALSE;
+        }
+        std::memcpy(copy, bytes, size);
+        CM2Shared* model = static_cast<CM2Shared*>(shared);
+        M2Data* read = model->m_data;
+        model->m_data = static_cast<M2Data*>(copy);
+        model->m_fileSize = size;
+        if (read) {
+            SIMD::FreeA16(read);
+        }
+        return WXL_TRUE;
+    }
+
     // --- M2: wxl.m2file -------------------------------------------------------------------------
 
     wxl_bool WXL_CALL m2_file_info(const void* file, wxl_m2file* out) {
@@ -844,5 +1178,27 @@ namespace WarcraftXL::Binding {
         if (CM2Shared* shared = static_cast<CM2Shared*>(file)) {
             shared->m_billboardBoneCount++;
         }
+    }
+
+    const char* WXL_CALL map_obj_path(const void* map_obj) {
+        return map_obj ? static_cast<const CMapObj*>(map_obj)->m_wmoName : nullptr;
+    }
+
+    const void* WXL_CALL map_obj_bytes(const void* map_obj, uint32_t* size) {
+        if (!map_obj) {
+            return nullptr;
+        }
+        const CMapObj* root = static_cast<const CMapObj*>(map_obj);
+        if (size) {
+            *size = static_cast<uint32_t>(root->m_wmoFileSize);
+        }
+        return root->m_pWmoData;
+    }
+
+    wxl_bool WXL_CALL doodad_position(const void* def, wxl_vec3* out) {
+        if (!def || !out) {
+            return WXL_FALSE;
+        }
+        return Give(out, static_cast<const CMapDoodadDef*>(def)->m_position);
     }
 }

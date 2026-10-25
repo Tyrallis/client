@@ -32,6 +32,7 @@
 #include "WoW/Source/WowServices/RealmConnection.h"
 #include "WoW/Source/WowServices/WDataStore.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
+#include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00DD2008
@@ -211,7 +212,7 @@ WOWGUID ClntObjMgrGetActivePlayer() {
 
 // VERIFY: 60136c4f manual
 // OFFSET: 0x004D4DB0
-CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, TypeMask mask, const char* fileName, int32_t lineNumber) {
+CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, OBJECT_TYPE mask, const char* fileName, int32_t lineNumber) {
     ObjectMgr* mgr = s_curMgr;
 
     if (!mgr || !guid) {
@@ -230,6 +231,7 @@ CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, TypeMask mask, const char* fileNam
 // VERIFY: a72ee853 manual
 // OFFSET: 0x004D4B30
 int32_t ClntObjMgrEnumVisibleObjects(OBJECTENUMFUNC func, void* param) {
+    WXL_CORE_ZONE("ObjectMgr.EnumVisibleObjects");
     for (CGObject_C* object = s_curMgr->m_visibleObjects.Head(); object; object = s_curMgr->m_visibleObjects.Next(object)) {
         if (!func(object->m_key.m_guid, param)) {
             return 0;
@@ -341,8 +343,8 @@ void ClntObjMgrUnsetTypeMirrorHandler(OBJECT_TYPE_ID typeId, uint32_t fieldOffse
 // OFFSET: 0x004D3C40
 static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
     switch (object->m_obj->m_type) {
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER: {
+        case HEIR_TYPE_ITEM:
+        case HEIR_TYPE_CONTAINER: {
             if (typeId == ID_OBJECT) {
                 return ID_ITEM;
             }
@@ -354,8 +356,8 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER: {
+        case HEIR_TYPE_UNIT:
+        case HEIR_TYPE_PLAYER: {
             if (typeId == ID_OBJECT) {
                 return ID_UNIT;
             }
@@ -367,7 +369,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT: {
+        case HEIR_TYPE_GAMEOBJECT: {
             if (typeId == ID_OBJECT) {
                 return ID_GAMEOBJECT;
             }
@@ -375,7 +377,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT: {
+        case HEIR_TYPE_DYNAMICOBJECT: {
             if (typeId == ID_OBJECT) {
                 return ID_DYNAMICOBJECT;
             }
@@ -383,7 +385,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_CORPSE: {
             if (typeId == ID_OBJECT) {
                 return ID_CORPSE;
             }
@@ -460,35 +462,35 @@ static TSList<CMirrorHandler, TSGetLink<CMirrorHandler> >* GetObjectMirrorList(O
 // OFFSET: 0x004D3DF0
 static uint32_t GetNumDwordBlocks(uint32_t type, WOWGUID guid) {
     switch (type) {
-        case TYPEMASK_OBJECT: {
+        case HEIR_TYPE_OBJECT: {
             return 6;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM: {
+        case HEIR_TYPE_ITEM: {
             return 64;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER: {
+        case HEIR_TYPE_CONTAINER: {
             return 138;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT: {
+        case HEIR_TYPE_UNIT: {
             return 148;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER: {
+        case HEIR_TYPE_PLAYER: {
             return guid == ClntObjMgrGetActivePlayer() ? 1326 : 324;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT: {
+        case HEIR_TYPE_GAMEOBJECT: {
             return 18;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT: {
+        case HEIR_TYPE_DYNAMICOBJECT: {
             return 12;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_CORPSE: {
             return 36;
         }
 
@@ -596,14 +598,14 @@ static void DestroyRemovedObject(CGObject_C* object) {
     int32_t activePlayer = object->m_obj->m_guid == ClntObjMgrGetActivePlayer();
 
     switch (object->m_obj->m_type) {
-        case TYPEMASK_OBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER:
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_OBJECT:
+        case HEIR_TYPE_ITEM:
+        case HEIR_TYPE_CONTAINER:
+        case HEIR_TYPE_UNIT:
+        case HEIR_TYPE_PLAYER:
+        case HEIR_TYPE_GAMEOBJECT:
+        case HEIR_TYPE_DYNAMICOBJECT:
+        case HEIR_TYPE_CORPSE: {
             object->~CGObject_C();
             break;
         }
@@ -857,6 +859,7 @@ void ClntObjMgrInitializeShared() {
 
     MirrorInitialize();
     ConsoleCommandRegister("ObjUsage", CCommand_ObjUsage, CATEGORY_GAME, nullptr);
+    wxl::seam::ObjectMgr::InitializeShared::After();
 }
 
 // VERIFY: 6d6f17bf manual
@@ -905,7 +908,7 @@ static int32_t LinkPendingNodes(TSExplicitList<CMirrorHandler, offsetof(CMirrorH
 
     for (CMirrorHandler* handler = list->Head(); handler; handler = handler->m_link.Next()) {
         uint32_t misalign = handler->m_fieldByteOffset & 3;
-        pending->LinkNode(handler, (handler->m_linkPositionSelector != 1) + 1, nullptr);
+        pending->LinkNode(handler, (handler->m_linkPositionSelector != HANDLER_PRIORITY_HIGH) + 1, nullptr);
         handler->m_count = (handler->m_fieldByteSize + misalign + 3) >> 2;
     }
 
@@ -919,6 +922,9 @@ static int32_t FillInPartialObjectData(CGObject_C* object, WOWGUID guid, CDataSt
     uint8_t blockCount;
 
     if (!ExtractDirtyMasks(msg, &blockCount, masks)) {
+        if (wxl::seam::Listening(WXL_EV_ObjectUpdate)) {
+            wxl::seam::ObjectMgr::FillInPartialObjectData::After(0, object, guid.m_guid, msg, skipMirrorUpdate, zeroFillAbsent);
+        }
         return 0;
     }
 
@@ -960,6 +966,10 @@ static int32_t FillInPartialObjectData(CGObject_C* object, WOWGUID guid, CDataSt
         }
 
         object->SetBlock(i, value);
+    }
+
+    if (wxl::seam::Listening(WXL_EV_ObjectUpdate)) {
+        wxl::seam::ObjectMgr::FillInPartialObjectData::After(1, object, guid.m_guid, msg, skipMirrorUpdate, zeroFillAbsent);
     }
 
     return 1;
@@ -1130,6 +1140,7 @@ void ClntObjMgrUnsetObjMirrorHandler(WOWGUID guid, OBJECT_TYPE_ID typeId, uint32
 // VERIFY: 8be6328a manual
 // OFFSET: 0x004D5C80
 void ClntObjMgrDestroyShared() {
+    wxl::seam::ObjectMgr::DestroyShared::Before();
     for (uint32_t typeId = 0; typeId < NUM_CLIENT_OBJECT_TYPES; typeId++) {
         for (uint32_t i = 0; i < 1326; i++) {
             TSList<CMirrorHandler, TSGetLink<CMirrorHandler> >* list = &s_typeMirrorHandlers[typeId][i];
@@ -1190,8 +1201,8 @@ static int32_t PostInitObject(uint32_t time, CDataStore* msg, bool reenable) {
         return 0;
     }
 
-    if ((object->m_modelFlags & 0x20000) && (object->m_obj->m_type & TYPEMASK_UNIT)) {
-        static_cast<CGUnit_C*>(object)->SetClientInitData(create, object->m_obj->m_guid == ClntObjMgrGetActivePlayer());
+    if ((object->m_modelFlags & 0x20000) && (object->m_obj->m_type & TYPE_UNIT)) {
+      static_cast<CGUnit_C*>(object)->SetClientInitData(create, object->m_obj->m_guid == ClntObjMgrGetActivePlayer());
     }
 
     if (object->m_modelFlags & 0x40000) {
@@ -1268,12 +1279,14 @@ static CGObject_C* GetUpdateObject(WOWGUID guid, int32_t* reenabled) {
 
     if (object) {
         object->SetDisablePending(0);
+        wxl::seam::ObjectMgr::GetUpdateObject::After(object, guid.m_guid, reenabled);
         return object;
     }
 
     object = mgr->m_lazyCleanupObjects.Ptr(static_cast<uint32_t>(guid.m_guid), CHashKeyGUID(guid.m_guid));
 
     if (!object) {
+        wxl::seam::ObjectMgr::GetUpdateObject::After(nullptr, guid.m_guid, reenabled);
         return nullptr;
     }
 
@@ -1288,6 +1301,7 @@ static CGObject_C* GetUpdateObject(WOWGUID guid, int32_t* reenabled) {
         current->m_reenabledObjects.LinkToTail(object);
     }
 
+    wxl::seam::ObjectMgr::GetUpdateObject::After(object, guid.m_guid, reenabled);
     return object;
 }
 
@@ -1608,6 +1622,7 @@ static void UpdateOutOfRangeObjects(CDataStore* msg) {
 // VERIFY: 1da078ed manual
 // OFFSET: 0x004D73A0
 int32_t Packet_SMSG_UPDATE_OBJECT(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    WXL_CORE_ZONE("ObjectMgr.UpdateObject");
     uint32_t count;
     msg->Get(count);
 
@@ -1635,6 +1650,7 @@ int32_t Packet_SMSG_UPDATE_OBJECT(void* param, NETMESSAGE msgId, uint32_t time, 
         ExpireOldObjects(120000, static_cast<OBJECT_TYPE_ID>(typeId));
     }
 
+    wxl::seam::ObjectMgr::Packet_SMSG_UPDATE_OBJECT::After(result, param, msgId, time, msg);
     return result;
 }
 
@@ -1693,7 +1709,7 @@ int32_t Packet_SMSG_DESTROY_OBJECT(void* param, NETMESSAGE msgId, uint32_t time,
         return 1;
     }
 
-    if (death && (object->m_obj->m_type & TYPEMASK_UNIT) && static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth > 0) {
+    if (death && (object->m_obj->m_type & TYPE_UNIT) && static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth > 0) {
         static_cast<CGUnit_C*>(object)->OnDeath();
     }
 
@@ -1765,6 +1781,6 @@ CMirrorHandler::~CMirrorHandler() {
 // VERIFY: 7a5ce34e manual
 // OFFSET: 0x004038F0
 CGPlayer_C* ClntObjMgrGetActivePlayerObj() {
-    return static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    return static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 }
 

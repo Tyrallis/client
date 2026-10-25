@@ -3,7 +3,9 @@
 # The 64-bit client builds core's WarcraftXL.dll from the checkout beside this one, links it, and
 # calls into it from three places in its own source: WarcraftXLInit from Win64/WinMain.cpp (see
 # Init.h) and the seams' Before and After from the functions they attach to (see Seams.h). The
-# DLL lands next to the executable in bin/Win/, which is also where Mods/ and Logs/ go.
+# DLL lands next to the executable in bin/Win/, which is also where Mods/ and Logs/ go. Core also
+# builds wxl.lua, the runtime of the Lua mods, into bin/Win/Mods/wxl.lua/, so that a Lua mod runs
+# on this client with nothing else to build.
 #
 # Win32 is the configuration whose struct layouts are checked against the original binary; it
 # carries no runtime and the seam calls compile to nothing there. Only the include directories
@@ -36,9 +38,44 @@ if (Python3_Interpreter_FOUND)
         COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/seams/check_seams.py"
                 --seams "${WXL_CORE_DIR}/include/wxl/seams"
                 --client "${CMAKE_SOURCE_DIR}"
+                --contract "${WXL_SDK_DIR}/include/wxl/events.def"
         COMMENT "Checking the seam table against the fork's call sites"
         VERBATIM)
     add_dependencies(WorldClient wxl-seam-check)
+
+    # Core's list of the client databases is generated from this fork's DBClient.cpp and record
+    # types; Binding.cpp names every global in it, and x86 reads each at its static's address.
+    add_custom_target(wxl-dbs-check
+        COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/dbs/generate_client_dbs.py" --check
+                --client "${CMAKE_SOURCE_DIR}"
+                --out "${WXL_CORE_DIR}/include/wxl/core/client_dbs.def"
+        COMMENT "Checking core's list of client databases against the fork"
+        VERBATIM)
+    add_dependencies(WorldClient wxl-dbs-check)
+
+    # The SDK's update-field table is generated from this fork's field descriptors, descriptor
+    # blocks and mirror lists. generate_update_fields.py --check measures the blocks with clang-cl
+    # and fails when the table is not what the fork gives, so a pull that moves a field is caught
+    # here. Without clang-cl the check is left out (Binding.cpp still holds the block sizes).
+    if (CMAKE_CXX_COMPILER MATCHES "clang-cl")
+        set(WXL_FIELDS_CLANG_CL "${CMAKE_CXX_COMPILER}")
+    else ()
+        find_program(WXL_FIELDS_CLANG_CL NAMES clang-cl)
+    endif ()
+    if (WXL_FIELDS_CLANG_CL)
+        add_custom_target(wxl-fields-check
+            COMMAND "${Python3_EXECUTABLE}" "${WXL_CORE_DIR}/tools/fields/generate_update_fields.py"
+                    --check --quiet
+                    --client "${CMAKE_SOURCE_DIR}"
+                    --out "${WXL_SDK_DIR}/include/wxl/update_fields.def"
+                    --clang-cl "${WXL_FIELDS_CLANG_CL}"
+            COMMENT "Checking the SDK's update-field table against the fork"
+            VERBATIM)
+        add_dependencies(WorldClient wxl-fields-check)
+    else ()
+        message(STATUS "clang-cl was not found, so the update-field table is not checked against "
+            "the fork in this build; run core/tools/fields/generate_update_fields.py --check by hand.")
+    endif ()
 else ()
     message(WARNING "Python 3 was not found, so the seam wiring check will not run in this build. "
         "A dropped seam call site would go unnoticed; run core/tools/seams/check_seams.py by hand.")
@@ -49,12 +86,16 @@ endif ()
 # player's, Ui the game interface's, FrameScript the script context's, Net the world
 # connection's, Os the window procedure's, BlizzardCore the file open's, SoundInterface
 # the sound's, Scrn the paint's, Gx the device's, Frame the interface's, ConsoleDevice
-# the device's creation, Magic the spell casting's, Model2 the model renderer's and WoWCommon the
-# character appearance's. A library added
+# the device's creation, Magic the spell casting's, Storm the allocator's, DB the client
+# databases' and WoWCommon the character appearance's. A library added
 # here needs nothing else: the calls are declared by Seams.h,
 # which these include directories make reachable.
 set(WXL_SEAM_LIBRARIES WorldClient Event ObjectMgrClient Object Ui FrameScript Net Os BlizzardCore
-    SoundInterface Scrn Gx Frame ConsoleDevice Magic Model2 WoWCommon)
+    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2 WoWCommon)
+
+# The libraries whose sources carry profiler zones (WarcraftXL/Profile.h) and no seam call. The
+# zones compile to nothing on Win32, so these need the runtime only on x64.
+set(WXL_ZONE_LIBRARIES Model2)
 
 # The executables carry seam calls of their own: Client.cpp holds the one that takes the client
 # apart. On x64 they link WarcraftXLClient, whose include directories are PUBLIC; on Win32 there
@@ -73,6 +114,7 @@ endif ()
 # --- The runtime: core, built here as win-x64 ------------------------------------------------------
 set(WXL_CORE_ARCH "win-x64" CACHE STRING "Architecture of the core build tree" FORCE)
 set(WXL_CORE_MODS OFF CACHE BOOL "The mods core ships are win-x86 only" FORCE)
+set(WXL_CORE_LUA_MODS "${CMAKE_SOURCE_DIR}/bin/Win/Mods" CACHE PATH "Where core puts wxl.lua: the Mods/ the client scans" FORCE)
 
 # Core links the CRT statically, through CMAKE_MSVC_RUNTIME_LIBRARY. The root of this tree
 # predates the policy that makes that property count (CMP0091), so the runtime library here is
@@ -124,8 +166,17 @@ foreach (target ${WXL_SEAM_LIBRARIES})
         target_link_libraries(${target} PRIVATE wxl-core)
     endif ()
 endforeach ()
+foreach (target ${WXL_ZONE_LIBRARIES})
+    target_include_directories(${target} PRIVATE "${WXL_CORE_DIR}/include" "${WXL_SDK_DIR}/include")
+    target_link_libraries(${target} PRIVATE wxl-core)
+endforeach ()
 foreach (target ${WXL_SEAM_EXECUTABLES})
     if (TARGET ${target})
         target_link_libraries(${target} PRIVATE WarcraftXLClient)
     endif ()
 endforeach ()
+
+# wxl.lua comes with the runtime: building any executable builds it too, --target included.
+if (TARGET wxl-core-lua)
+    add_dependencies(WarcraftXLClient wxl-core-lua)
+endif ()

@@ -28,6 +28,7 @@
 #include "Engine/Source/Gx/CGxMatrixStack.h"
 #include "Engine/Source/ShaderEffect/ShadowCache.h"
 #include "Engine/Source/Tempest/C44Matrix.h"
+#include "WarcraftXL/Profile.h"
 
 // VERIFY: 78b69e1a manual
 // OFFSET: 0x007D5610
@@ -69,6 +70,7 @@ void CWorldScene::RenderCollisionDebug() {
 // VERIFY: cd492c82 manual
 // OFFSET: 0x0079A870
 void CWorldScene::Render(const C3Vector& cameraPos, float time) {
+    WXL_CORE_ZONE("WorldScene.Render");
     if (!CWorldScene::s_viewerMapObjDef) {
         CWorldScene::ComputeExteriorSortDistances();
     }
@@ -171,7 +173,7 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
         clearColor.a = 0x00;
     }
 
-    GxSceneClear(3, clearColor);
+    GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, clearColor);
     CWorldScene::s_unk_B2EB68.Render();
 
     if (CWorldScene::camTargetEntity) {

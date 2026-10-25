@@ -21,12 +21,13 @@
 #include "Engine/Source/Tempest/C33Matrix.h"
 #include "Engine/Source/Tempest/C3Ray.h"
 #include "Engine/Source/Tempest/NTempest.h"
+#include "WarcraftXL/Profile.h"
 
 // STATIC: 0x00A45374
-const uint32_t s_localLighting[7] = { 1, 1, 1, 1, 1, 0, 0 };
+const uint32_t s_localLighting[M2BLEND_COUNT] = { 1, 1, 1, 1, 1, 0, 0 };
 
 // STATIC: 0x00A453B0
-const uint32_t s_blendModes[3][7] = { { 0, 1, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 } };
+const uint32_t s_blendModes[3][M2BLEND_COUNT] = { { 0, 1, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 } };
 
 // STATIC: 0x00AF5898
 uint32_t CM2Scene::s_optFlags = 0xFFFFFFFF;
@@ -48,6 +49,7 @@ void CM2Scene::SetTime(uint32_t time) {
 // VERIFY: fb95d1fc auto
 // OFFSET: 0x0081C9C0
 void CM2Scene::AdvanceTime(uint32_t delta) {
+    WXL_CORE_ZONE("M2.AdvanceTime");
     this->m_time += delta;
     this->m_cache->UpdateShared();
     this->m_cache->GarbageCollect(0);
@@ -78,19 +80,19 @@ void CM2Scene::SetFloat18(float value) {
 uint32_t ParticleBlendToM2Blend(uint32_t blend) {
     switch (blend) {
         case 1:
-            return 1;
+            return M2BLEND_ALPHA_KEY;
         case 2:
-            return 2;
+            return M2BLEND_ALPHA;
         case 3:
-            return 4;
+            return M2BLEND_ADD;
         case 4:
-            return 5;
+            return M2BLEND_MOD;
         case 5:
-            return 6;
+            return M2BLEND_MOD2X;
         case 10:
-            return 3;
+            return M2BLEND_NO_ALPHA_ADD;
         default:
-            return 0;
+            return M2BLEND_OPAQUE;
     }
 }
 
@@ -603,7 +605,7 @@ M2HitRec* CM2Scene::HitTestGeometry(const CM2Model* model, uint32_t pass, const 
 
         M2Material* material = &data->m_materials[batch->m_materialIndex];
 
-        if (model->m_hitTestMode == 2 && !material->m_blendMode) {
+        if (model->m_hitTestMode == 2 && material->m_blendMode == M2BLEND_OPAQUE) {
             continue;
         }
 
@@ -1464,9 +1466,9 @@ void __stdcall CM2Scene::ComputeElementShaders(M2Element* element) {
     uint32_t boneInfluences = element->m_skinSection->m_boneInfluences;
     int32_t alphaTest;
 
-    if (!material->m_blendMode) {
+    if (material->m_blendMode == M2BLEND_OPAQUE) {
         alphaTest = 0;
-    } else if (material->m_blendMode == 1) {
+    } else if (material->m_blendMode == M2BLEND_ALPHA_KEY) {
         alphaTest = static_cast<int32_t>(element->m_alpha * 224.0f);
     } else {
         alphaTest = 1;
@@ -1564,7 +1566,7 @@ void CM2Scene::SortAdditiveParticleElements(uint32_t pass) {
     for (uint32_t i = 0; i < list.m_count; i++) {
         M2Element* element = &this->m_elements.m_data[list.m_data[i]];
         M2Data* data = element->m_model->m_shared->m_data;
-        uint32_t blend = 0;
+        uint32_t blend = M2BLEND_OPAQUE;
 
         switch (element->m_type) {
             case 0:
@@ -1576,7 +1578,7 @@ void CM2Scene::SortAdditiveParticleElements(uint32_t pass) {
                 blend = data->m_materials[data->m_ribbons[element->m_index].m_materialIndices[0]].m_blendMode;
                 break;
             case 4:
-                blend = (this->m_cache->m_flags & 0x100) ? 4 : ParticleBlendToM2Blend(element->m_emitter->m_params.m_materialBlend);
+                blend = (this->m_cache->m_flags & 0x100) ? M2BLEND_ADD : ParticleBlendToM2Blend(element->m_emitter->m_params.m_materialBlend);
                 break;
             default:
                 break;
@@ -1641,7 +1643,7 @@ CM2Scene::~CM2Scene() {
 // VERIFY: 7bb79c57 manual
 // OFFSET: 0x00821930
 M2Element* CM2Scene::AddParticleElement(CParticleEmitter2* emitter, CM2Model* model, float depth, float alpha, int32_t split, uint32_t& index, uint32_t& additiveCount) {
-    if (!emitter->HasLiveParticles() || emitter->m_params.m_hasModel == 1) {
+    if (!emitter->HasLiveParticles() || emitter->m_params.m_hasModel == CParticleEmitter2::PT_MODEL) {
         return nullptr;
     }
 
@@ -1685,6 +1687,7 @@ M2Element* CM2Scene::AddParticleElement(CParticleEmitter2* emitter, CM2Model* mo
 // VERIFY: d0feeb6c manual
 // OFFSET: 0x00821A20
 int32_t CM2Scene::Animate(const C3Vector& cameraPos) {
+    WXL_CORE_ZONE("M2.Animate");
     this->m_frameStamp++;
 
     uint32_t optFlags = this->m_cache->m_flags & 0xE000;
@@ -1840,7 +1843,7 @@ int32_t CM2Scene::Animate(const C3Vector& cameraPos) {
             M2Material* material = &data->m_materials[batch->m_materialIndex];
             int32_t projected = (batch->m_flags & 4) && this->m_projectTextureCallback;
             M2Material* baseMaterial = batch->m_materialLayer ? &data->m_materials[batch->m_materialIndex - batch->m_materialLayer] : material;
-            int32_t transparent = baseMaterial->m_blendMode > 1 || alpha < 0.99998999f;
+            int32_t transparent = baseMaterial->m_blendMode > M2BLEND_ALPHA_KEY || alpha < 0.99998999f;
             CShaderEffect* effect = optimized ? model->m_optGeo->m_effects[i] : model->m_shared->m_effects[i];
 
             if (!effect) {
@@ -2018,7 +2021,7 @@ int32_t CM2Scene::Animate(const C3Vector& cameraPos) {
             element->m_pixelPermute = 0xFFFFFFFF;
             element->m_shadowValue = 0;
 
-            if (material->m_blendMode > 1 || alpha < 0.99998999f) {
+            if (material->m_blendMode > M2BLEND_ALPHA_KEY || alpha < 0.99998999f) {
                 if (above) {
                     this->m_passElements[1].New(elementIndex);
                 } else {
@@ -2213,6 +2216,7 @@ void CM2Scene::Release() {
 // VERIFY: 610b7e45 manual
 // OFFSET: 0x00823CB0
 void CM2Scene::Draw(M2PASS pass) {
+    WXL_CORE_ZONE("M2.Draw");
     if (!((1 << pass) & this->m_passMask)) {
         return;
     }
