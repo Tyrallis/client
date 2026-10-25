@@ -21,6 +21,7 @@
 #include "Engine/Source/Tempest/C33Matrix.h"
 #include "Engine/Source/Tempest/C3Ray.h"
 #include "Engine/Source/Tempest/NTempest.h"
+#include "WarcraftXL/Profile.h"
 
 // STATIC: 0x00A45374
 const uint32_t s_localLighting[M2BLEND_COUNT] = { 1, 1, 1, 1, 1, 0, 0 };
@@ -48,6 +49,7 @@ void CM2Scene::SetTime(uint32_t time) {
 // VERIFY: fb95d1fc auto
 // OFFSET: 0x0081C9C0
 void CM2Scene::AdvanceTime(uint32_t delta) {
+    WXL_CORE_ZONE("M2.AdvanceTime");
     this->m_time += delta;
     this->m_cache->UpdateShared();
     this->m_cache->GarbageCollect(0);
@@ -1685,6 +1687,7 @@ M2Element* CM2Scene::AddParticleElement(CParticleEmitter2* emitter, CM2Model* mo
 // VERIFY: d0feeb6c manual
 // OFFSET: 0x00821A20
 int32_t CM2Scene::Animate(const C3Vector& cameraPos) {
+    WXL_CORE_ZONE("M2.Animate");
     this->m_frameStamp++;
 
     uint32_t optFlags = this->m_cache->m_flags & 0xE000;
@@ -2213,6 +2216,7 @@ void CM2Scene::Release() {
 // VERIFY: 610b7e45 manual
 // OFFSET: 0x00823CB0
 void CM2Scene::Draw(M2PASS pass) {
+    WXL_CORE_ZONE("M2.Draw");
     if (!((1 << pass) & this->m_passMask)) {
         return;
     }

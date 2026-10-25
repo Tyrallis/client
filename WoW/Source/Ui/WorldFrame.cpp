@@ -90,6 +90,7 @@
 #include <cmath>
 #include "WoW/Source/Ui/SpellBookFrame.h"
 #include "Engine/Source/ShaderEffect/Types.h"
+#include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
 
 // STATIC: 0x009F9864
@@ -1968,6 +1969,7 @@ void CGWorldFrame::OnLayerUpdate(float elapsedSec) {
 // VERIFY: b7190175 manual
 // OFFSET: 0x004FA5F0
 void CGWorldFrame::OnWorldUpdate() {
+    WXL_CORE_ZONE("World.Update");
     float elapsedSec = this->m_elapsedSec;
     CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
@@ -2101,6 +2103,7 @@ void CGWorldFrame::OnWorldUpdate() {
 // VERIFY: 09c5961f manual
 // OFFSET: 0x004FAF90
 void CGWorldFrame::RenderWorld(void* param) {
+    WXL_CORE_ZONE("World.Render");
     wxl::seam::WorldFrame::RenderWorld::Before(param);
     CGWorldFrame* worldFrame = static_cast<CGWorldFrame*>(param);
     C44Matrix projection;

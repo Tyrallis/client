@@ -25,6 +25,7 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Tempest/CMath.h"
 #include "Engine/Source/Tempest/CRect.h"
+#include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00B499A8
@@ -866,6 +867,7 @@ int32_t CSimpleTop::StartMoveOrResizeFrame(const CMouseEvent& evt, MOVERESIZE_RE
 // VERIFY: 09bbf45a auto
 // OFFSET: 0x00495320
 void CSimpleTop::OnLayerUpdate(float elapsedSec) {
+    WXL_CORE_ZONE("UI.Update");
     CSimpleFrame* frame;
 
     while ((frame = this->m_destroyed.Head()) != nullptr) {
@@ -894,6 +896,7 @@ void CSimpleTop::OnLayerUpdate(float elapsedSec) {
 // VERIFY: 587fb7f2 auto
 // OFFSET: 0x00495410
 void CSimpleTop::OnLayerRender() {
+    WXL_CORE_ZONE("UI.Render");
     C2Vector offset;
     CameraSetupScreenProjection(this->m_rect, offset, 0.0f, 0);
 

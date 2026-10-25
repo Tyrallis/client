@@ -93,6 +93,10 @@ endif ()
 set(WXL_SEAM_LIBRARIES WorldClient Event ObjectMgrClient Object Ui FrameScript Net Os BlizzardCore
     SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2)
 
+# The libraries whose sources carry profiler zones (WarcraftXL/Profile.h) and no seam call. The
+# zones compile to nothing on Win32, so these need the runtime only on x64.
+set(WXL_ZONE_LIBRARIES Model2)
+
 # The executables carry seam calls of their own: Client.cpp holds the one that takes the client
 # apart. On x64 they link WarcraftXLClient, whose include directories are PUBLIC; on Win32 there
 # is no such library, so they are given the directories directly.
@@ -161,6 +165,10 @@ foreach (target ${WXL_SEAM_LIBRARIES})
         target_include_directories(${target} PRIVATE "${WXL_CORE_DIR}/include" "${WXL_SDK_DIR}/include")
         target_link_libraries(${target} PRIVATE wxl-core)
     endif ()
+endforeach ()
+foreach (target ${WXL_ZONE_LIBRARIES})
+    target_include_directories(${target} PRIVATE "${WXL_CORE_DIR}/include" "${WXL_SDK_DIR}/include")
+    target_link_libraries(${target} PRIVATE wxl-core)
 endforeach ()
 foreach (target ${WXL_SEAM_EXECUTABLES})
     if (TARGET ${target})

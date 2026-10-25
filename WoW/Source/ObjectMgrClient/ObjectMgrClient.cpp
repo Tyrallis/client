@@ -32,6 +32,7 @@
 #include "WoW/Source/WowServices/RealmConnection.h"
 #include "WoW/Source/WowServices/WDataStore.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
+#include "WarcraftXL/Profile.h"
 #include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00DD2008
@@ -230,6 +231,7 @@ CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, OBJECT_TYPE mask, const char* file
 // VERIFY: a72ee853 manual
 // OFFSET: 0x004D4B30
 int32_t ClntObjMgrEnumVisibleObjects(OBJECTENUMFUNC func, void* param) {
+    WXL_CORE_ZONE("ObjectMgr.EnumVisibleObjects");
     for (CGObject_C* object = s_curMgr->m_visibleObjects.Head(); object; object = s_curMgr->m_visibleObjects.Next(object)) {
         if (!func(object->m_key.m_guid, param)) {
             return 0;
@@ -1620,6 +1622,7 @@ static void UpdateOutOfRangeObjects(CDataStore* msg) {
 // VERIFY: 1da078ed manual
 // OFFSET: 0x004D73A0
 int32_t Packet_SMSG_UPDATE_OBJECT(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    WXL_CORE_ZONE("ObjectMgr.UpdateObject");
     uint32_t count;
     msg->Get(count);
 
