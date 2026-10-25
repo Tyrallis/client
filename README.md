@@ -28,21 +28,19 @@ the stock 32-bit client by detour is called here by the client's own source.
 
 ### This branch: `x64-port` (Tyrallis)
 
-WarcraftXL's main, which carries the model, Gx and component work these mods started with, plus:
+WarcraftXL's main, which carries everything these mods need (the model, Gx and component services,
+world models and bone watchers, blend mode 7, retail animation ids; ABI 0.1.21), plus this fork's own:
 
-- **`x64-extras`**, offered to WarcraftXL: wxl.m2's world models and bone watchers, the cast
-  events' ground point, modern models' blend mode 7, retail animation ids, Ogg sounds and BfA's HD
-  bodies (client, [core](https://github.com/Tyrallis/core/tree/x64-port) and
-  [sdk](https://github.com/Tyrallis/sdk/tree/x64-port), ABI 0.1.21), with a fix that keeps MSVC from
-  skipping the SDK's and core's tables on their second include.
-- This fork's own: unsigned interface files and patches accepted by default
+- unsigned interface files and patches accepted by default
   (`WOWDECOMP_DISABLE_SIGNATURE_CHECKS=ON`), which the [Retroport Workbench](https://github.com/Tyrallis/Retroport/tree/creatures)'s
   patches need, and a login that waits for a starting worldserver.
 
-| Mod | Runs on |
+| Mod | Needs |
 |---|---|
-| [wxl.modern-m2](https://github.com/Tyrallis/wxl.modern-m2), [wxl.unit-outline](https://github.com/Tyrallis/wxl.unit-outline), [wxl.torghast-modelscene](https://github.com/Tyrallis/wxl.torghast-modelscene) | WarcraftXL main (ABI 0.1.20) |
-| [wxl.equip-plus](https://github.com/Tyrallis/wxl.equip-plus) (live physics), [wxl.retail-spellvisuals](https://github.com/Tyrallis/wxl.retail-spellvisuals) | this branch (ABI 0.1.21) until `x64-extras` is merged |
+| [wxl.modern-m2](https://github.com/Tyrallis/wxl.modern-m2), [wxl.unit-outline](https://github.com/Tyrallis/wxl.unit-outline), [wxl.torghast-modelscene](https://github.com/Tyrallis/wxl.torghast-modelscene) | ABI 0.1.20 and up |
+| [wxl.equip-plus](https://github.com/Tyrallis/wxl.equip-plus) (live physics), [wxl.retail-spellvisuals](https://github.com/Tyrallis/wxl.retail-spellvisuals) | ABI 0.1.21 and up |
+
+All run on WarcraftXL main and on this branch.
 
 Build with Visual Studio 2022. A step-by-step install guide is on the
 [Retroport Releases](https://github.com/Tyrallis/Retroport/releases) page.
