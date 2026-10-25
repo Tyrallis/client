@@ -104,7 +104,8 @@ endif ()
 # here needs nothing else: the calls are declared by Seams.h,
 # which these include directories make reachable.
 set(WXL_SEAM_LIBRARIES WorldClient Event ObjectMgrClient Object Ui FrameScript Net Os BlizzardCore
-    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2)
+    SoundInterface Scrn Gx Frame ConsoleDevice Magic ConsoleBase Glue WowServices Storm DB Services Model2
+    BLPFile SoundEngine)
 
 # The libraries whose sources carry point lines (WarcraftXL/Points.h) and no seam call: UIUtil
 # holds the camera's.

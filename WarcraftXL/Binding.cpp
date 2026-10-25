@@ -9,7 +9,9 @@
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/Base/SIMD.h"
 #include "Engine/Source/Model2/M2Shared.h"
+#include "Engine/Source/Services/Texture.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
+#include "Engine/Source/BlizzardCore/Source/System/File/File.h"
 #include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/MPQGlobals.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
@@ -60,8 +62,10 @@
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/MapDoodadDef.h"
 #include "WoW/Source/WorldClient/MapObj.h"
+#include "WoW/Source/WorldClient/MapObjGroup.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "wxl/core/gpu.hpp"
+#include "wxl/core/filestack.hpp"
 #include "wxl/core/storm.hpp"
 #include "wxl/events.h"
 #include "wxl/objects/fields.hpp"
@@ -503,6 +507,42 @@ namespace WarcraftXL::Binding {
         return SFile::m_basePath;
     }
 
+    // The file stack, as the runtime's file layer reads it: its declarations are the client's,
+    // member for member, which these hold to the client's own types.
+    namespace fsk = wxl::core::filestack;
+    static_assert(sizeof(fsk::FileInfo) == sizeof(Blizzard::File::FileInfo) &&
+                  offsetof(fsk::FileInfo, size) == offsetof(Blizzard::File::FileInfo, m_size) &&
+                  offsetof(fsk::FileInfo, existence) == offsetof(Blizzard::File::FileInfo, m_existence) &&
+                  offsetof(fsk::FileInfo, regular_file) == offsetof(Blizzard::File::FileInfo, m_regularFile));
+    static_assert(sizeof(fsk::Filesystem) == sizeof(Blizzard::File::Filesystem) &&
+                  offsetof(fsk::Filesystem, verbs) == offsetof(Blizzard::File::Filesystem, m_verbs) &&
+                  offsetof(fsk::Functions, open) == offsetof(Blizzard::File::Functions, m_open) &&
+                  offsetof(fsk::Functions, dirwalk) == offsetof(Blizzard::File::Functions, m_dirwalk) &&
+                  offsetof(fsk::Functions, shutdown) == offsetof(Blizzard::File::Functions, m_shutdown));
+    static_assert(sizeof(fsk::StreamRecord) == sizeof(Blizzard::File::StreamRecord) &&
+                  offsetof(fsk::StreamRecord, info) == offsetof(Blizzard::File::StreamRecord, m_info) &&
+                  offsetof(fsk::StreamRecord, pathname) == offsetof(Blizzard::File::StreamRecord, m_pathname));
+    static_assert(sizeof(fsk::ProcessDirParms) == sizeof(Blizzard::File::ProcessDirParms) &&
+                  offsetof(fsk::ProcessDirParms, is_dir) == offsetof(Blizzard::File::ProcessDirParms, m_isDir));
+    static_assert(sizeof(fsk::FileParms) == sizeof(System_File::Stacked::FileParms) &&
+                  offsetof(fsk::FileParms, stream) == offsetof(System_File::Stacked::FileParms, m_stream) &&
+                  offsetof(fsk::FileParms, info2) == offsetof(System_File::Stacked::FileParms, m_info2) &&
+                  offsetof(fsk::FileParms, mode) == offsetof(System_File::Stacked::FileParms, m_mode) &&
+                  offsetof(fsk::FileParms, buffer) == offsetof(System_File::Stacked::FileParms, m_buffer) &&
+                  offsetof(fsk::FileParms, amount) == offsetof(System_File::Stacked::FileParms, m_amount) &&
+                  offsetof(fsk::FileParms, pos) == offsetof(System_File::Stacked::FileParms, m_pos) &&
+                  offsetof(fsk::FileParms, pos_mode) == offsetof(System_File::Stacked::FileParms, m_posMode) &&
+                  offsetof(fsk::FileParms, cookie) == offsetof(System_File::Stacked::FileParms, m_cookie) &&
+                  offsetof(fsk::FileParms, dircallback) == offsetof(System_File::Stacked::FileParms, m_dircallback));
+
+    void** WXL_CALL filestack_top() {
+        return reinterpret_cast<void**>(&System_File::Stacked::s_manager);
+    }
+
+    const void* WXL_CALL filestack_initial() {
+        return &System_File::Stacked::s_initstack;
+    }
+
     uint32_t WXL_CALL archive_list(wxl_core_name_fn fn, void* user) {
         if (!fn) {
             return 0;
@@ -747,6 +787,67 @@ namespace WarcraftXL::Binding {
 
     const char* WXL_CALL map_obj_path(const void* map_obj) {
         return map_obj ? static_cast<const CMapObj*>(map_obj)->m_wmoName : nullptr;
+    }
+
+    const void* WXL_CALL map_area_bytes(const void* area, int32_t* x, int32_t* y, void** file, uint32_t* size) {
+        if (!area) {
+            return nullptr;
+        }
+        const CMapArea* tile = static_cast<const CMapArea*>(area);
+        if (x) {
+            *x = tile->m_index.x;
+        }
+        if (y) {
+            *y = tile->m_index.y;
+        }
+        if (file) {
+            *file = tile->m_file;
+        }
+        if (size) {
+            *size = tile->m_fileSize;
+        }
+        return tile->m_fileBuffer;
+    }
+
+    wxl_bool WXL_CALL file_name(void* file, char* buffer, uint32_t capacity) {
+        if (!file || !buffer || !capacity) {
+            return WXL_FALSE;
+        }
+        buffer[0] = 0;
+        return SFile::GetActualFileName(static_cast<SFileImpl*>(file), buffer, capacity) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    const void* WXL_CALL map_obj_group_bytes(const void* group, void** parent, uint32_t* index, uint32_t* size) {
+        if (!group) {
+            return nullptr;
+        }
+        const CMapObjGroup* g = static_cast<const CMapObjGroup*>(group);
+        if (parent) {
+            *parent = g->m_parent;
+        }
+        if (size) {
+            *size = g->m_fileSize;
+        }
+        if (index) {
+            *index = 0;
+            const CMapObj* root = g->m_parent;
+            const uint32_t count = root ? static_cast<uint32_t>(root->m_mapObjGroupCount) : 0;
+            for (uint32_t i = 0; i < count && i < 512; i++) {
+                if (root->m_mapObjGroupArray[i] == g) {
+                    *index = i;
+                    break;
+                }
+            }
+        }
+        return g->m_filePtr;
+    }
+
+    const void* WXL_CALL model_skin_bytes(const void* shared) {
+        return shared ? static_cast<const CM2Shared*>(shared)->m_skinData : nullptr;
+    }
+
+    const char* WXL_CALL texture_name(const void* texture) {
+        return texture ? static_cast<const CTexture*>(texture)->m_filename : nullptr;
     }
 
     const void* WXL_CALL map_obj_bytes(const void* map_obj, uint32_t* size) {

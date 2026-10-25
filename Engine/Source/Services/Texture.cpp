@@ -1856,6 +1856,10 @@ int32_t PumpBlpTextureAsync(CTexture* texture, void* data) {
 // VERIFY: 85a7ce70 manual
 // OFFSET: 0x004B7E80
 void AsyncTextureSuccessCallback(CTexture* texture) {
+    if (wxl::seam::Listening(WXL_EV_TextureDecode)) {
+        wxl::seam::Texture::AsyncTextureSuccessCallback::Before(texture);
+    }
+
     if (!PumpBlpTextureAsync(texture, texture->m_asyncObject->m_buffer)) {
         if (!texture->m_status.IsEmpty()) {
             SysMsgAdd(&texture->m_status);

@@ -1304,6 +1304,10 @@ int32_t M2Init<M2TextureWeight>(uint8_t* base, uint32_t size, const M2Data& data
 // VERIFY: 2f176c2e auto
 // OFFSET: 0x00838490
 int32_t CM2Shared::FinishLoadingSkinProfile(uint32_t size) {
+    if (wxl::seam::Listening(WXL_EV_SkinProfileLoad)) {
+        wxl::seam::M2Shared::FinishLoadingSkinProfile::Before(this, size);
+    }
+
     if (this->m_flags & 2) {
         return 1;
     }

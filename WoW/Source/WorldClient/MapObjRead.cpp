@@ -505,6 +505,10 @@ void CMapObjGroup::HandleAntiportal() {
 // VERIFY: 579978be manual
 // OFFSET: 0x007D82E0
 void CMapObjGroup::Create() {
+    if (wxl::seam::Listening(WXL_EV_MapObjectGroupLoad)) {
+        wxl::seam::MapObj::CreateGroup::Before(this);
+    }
+
     SMOGroupHeader* header = reinterpret_cast<SMOGroupHeader*>(static_cast<uint8_t*>(this->m_filePtr) + 20);
     this->m_parent->m_mapObjGroupList.LinkToTail(this);
 
