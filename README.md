@@ -21,7 +21,7 @@
 ## 🚀 Overview
 
 A 64-bit `WowClient64.exe` that plays like the original and loads mods written against the
-[WarcraftXL SDK](https://github.com/WarcraftXL/sdk). It is a hard fork of
+[WarcraftXL SDK](https://github.com/WarcraftXL/sdk). It is a fork of
 [wowdecomp](https://github.com/SatyPardus/wowdecomp), the C++ decompilation of `Wow.exe`, with
 [WarcraftXL core](https://github.com/WarcraftXL/core) linked in: the same runtime that loads into
 the stock 32-bit client by detour is called here by the client's own source.
