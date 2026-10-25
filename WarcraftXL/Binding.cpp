@@ -47,6 +47,12 @@
 #include "WoW/Source/Object/MovementShared.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "WoW/Source/Ui/ChatFrame.h"
+#include "WoW/Source/Ui/DuelInfo.h"
+#include "WoW/Source/Ui/LootFrame.h"
+#include "WoW/Source/Ui/ReputationInfo.h"
+#include "WoW/Source/Ui/TradeFrame.h"
+#include "WoW/Source/Object/ObjectClient/AuraData.h"
+#include "Engine/Source/Os/TimeManager.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/MapDoodadDef.h"
@@ -148,6 +154,10 @@ namespace {
         }
     }
 }
+
+// Defined beside the statics they reach, which their files keep to themselves.
+void WarcraftXLAnswerDuel(WOWGUID arbiter, WOWGUID challenger, bool accept);
+int32_t WarcraftXLNextLootRollId();
 
 namespace WarcraftXL::Binding {
     // --- the field rows, generated from the table --------------------------------------------
@@ -752,5 +762,107 @@ namespace WarcraftXL::Binding {
             return WXL_FALSE;
         }
         return Give(out, static_cast<const CMapDoodadDef*>(def)->m_position);
+    }
+
+    // --- gameplay.def ---------------------------------------------------------------------------
+
+    int32_t WXL_CALL unit_aura_slot(const void* unit, const void* aura) {
+        if (!unit || !aura) {
+            return -1;
+        }
+        CGUnit_C* owner = const_cast<CGUnit_C*>(static_cast<const CGUnit_C*>(unit));
+        const uint32_t count = owner->GetAuraCount();
+        if (!count) {
+            return -1;
+        }
+        const AuraData* first = &owner->m_auras[0];
+        const AuraData* slot = static_cast<const AuraData*>(aura);
+        if (slot < first || slot >= first + count) {
+            return -1;
+        }
+        return static_cast<int32_t>(slot - first);
+    }
+
+    uint32_t WXL_CALL os_time_ms(void) {
+        return OsGetAsyncTimeMs();
+    }
+
+    uint64_t WXL_CALL loot_object_guid(void) {
+        return CGLootInfo::m_lootObj.m_guid;
+    }
+
+    uint32_t WXL_CALL loot_kind(void) {
+        return static_cast<uint32_t>(CGLootInfo::m_lootAcquire);
+    }
+
+    uint32_t WXL_CALL loot_money(void) {
+        return static_cast<uint32_t>(CGLootInfo::m_coins);
+    }
+
+    wxl_bool WXL_CALL loot_slot(uint32_t index, int32_t* out) {
+        if (!out || index >= Extent(CGLootInfo::m_slots) || !CGLootInfo::m_slots[index].m_itemID) {
+            return WXL_FALSE;
+        }
+        const LootSlot& slot = CGLootInfo::m_slots[index];
+        out[0] = slot.m_itemID;
+        out[1] = slot.m_count;
+        out[2] = slot.m_displayId;
+        out[3] = slot.m_randomSuffix;
+        out[4] = slot.m_randomPropertyId;
+        out[5] = slot.m_slot;
+        out[6] = slot.m_slotType;
+        return WXL_TRUE;
+    }
+
+    uint32_t WXL_CALL loot_next_roll_id(void) {
+        return static_cast<uint32_t>(WarcraftXLNextLootRollId());
+    }
+
+    int32_t WXL_CALL ui_map_id(void) {
+        return CGGameUI::m_iCurrentMapID;
+    }
+
+    wxl_bool WXL_CALL faction_standing(uint32_t list_id, int32_t* faction_id, int32_t* base, int32_t* standing) {
+        if (list_id >= Extent(CGReputationInfo::m_factionStandings)) {
+            return WXL_FALSE;
+        }
+        const FactionStanding& entry = CGReputationInfo::m_factionStandings[list_id];
+        if (faction_id) {
+            *faction_id = entry.m_factionId;
+        }
+        if (base) {
+            *base = entry.m_base;
+        }
+        if (standing) {
+            *standing = entry.m_standing;
+        }
+        return WXL_TRUE;
+    }
+
+    uint64_t WXL_CALL ui_interact_target(void) {
+        return CGGameUI::m_interactTarget.m_guid;
+    }
+
+    uint64_t WXL_CALL trade_partner(void) {
+        return CGTradeInfo::m_tradingPlayer.m_guid;
+    }
+
+    void WXL_CALL group_invite_answer(wxl_bool accept) {
+        if (accept) {
+            CGPlayer_C::AcceptGroup(0);
+        } else {
+            CGPlayer_C::DeclineGroup();
+        }
+    }
+
+    void WXL_CALL resurrect_answer(uint64_t offerer, uint32_t sickness, uint32_t use_timer, wxl_bool accept) {
+        CGPlayer_C::s_resurrectOfferer = WOWGUID{ offerer };
+        CGPlayer_C::s_resurrectOfferSickness = sickness;
+        CGPlayer_C::s_resurrectOfferUseTimer = use_timer;
+        CGPlayer_C::AcceptResurrectRequest(accept ? 1 : 0);
+    }
+
+    void WXL_CALL duel_answer(uint64_t arbiter, uint64_t challenger, wxl_bool accept) {
+        WarcraftXLAnswerDuel(WOWGUID{ arbiter }, WOWGUID{ challenger }, accept != WXL_FALSE);
     }
 }

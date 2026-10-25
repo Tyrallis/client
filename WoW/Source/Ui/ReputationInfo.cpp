@@ -19,6 +19,7 @@
 #include "WoW/Source/Object/Unit.h"
 #include "WoW/Source/Object/Player.h"
 #include "WoW/Source/Ui/GameUI.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00C22B70
 FactionStanding CGReputationInfo::m_factionStandings[128];
@@ -885,6 +886,9 @@ void CGReputationInfo::InitializeGame() {
 // VERIFY: d8518e61 manual
 // OFFSET: 0x005D20A0
 int32_t Packet_SMSG_SET_FACTION_STANDING(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_ReputationChanged)) {
+        wxl::seam::Reputation::Packet_SMSG_SET_FACTION_STANDING::Before(param, msgId, time, msg);
+    }
     bool sort = false;
     bool updateQuests = false;
     bool updateReaction = false;

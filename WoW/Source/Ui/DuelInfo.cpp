@@ -12,6 +12,7 @@
 #include "WoW/Source/Object/ObjectClient/Player_C.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/FriendList.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00C22B58
 static WOWGUID s_duelArbiter;
@@ -28,6 +29,9 @@ static uint32_t s_countdownTimer;
 // VERIFY: 516f4f57 auto
 // OFFSET: 0x005CFA50
 int32_t Packet_SMSG_DUEL_COUNTDOWN(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_DuelCountdown)) {
+        wxl::seam::Duel::Packet_SMSG_DUEL_COUNTDOWN::Before(param, msgId, time, msg);
+    }
     uint32_t countdown;
     msg->Get(countdown);
     s_countdown = countdown / 1000;
@@ -38,6 +42,9 @@ int32_t Packet_SMSG_DUEL_COUNTDOWN(void* param, NETMESSAGE msgId, uint32_t time,
 // VERIFY: ed3c6531 auto
 // OFFSET: 0x005CFA90
 int32_t Packet_SMSG_DUEL_COMPLETE(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_DuelFinished)) {
+        wxl::seam::Duel::Packet_SMSG_DUEL_COMPLETE::Before(param, msgId, time, msg);
+    }
     uint8_t completed;
     msg->Get(completed);
 
@@ -62,6 +69,9 @@ int32_t Packet_SMSG_DUEL_COMPLETE(void* param, NETMESSAGE msgId, uint32_t time, 
 // VERIFY: a77809b9 auto
 // OFFSET: 0x005CFB20
 int32_t Packet_SMSG_DUEL_WINNER(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_DuelWon)) {
+        wxl::seam::Duel::Packet_SMSG_DUEL_WINNER::Before(param, msgId, time, msg);
+    }
     uint8_t retreat;
     char winner[48];
     char loser[48];
@@ -105,6 +115,14 @@ void CGDuelInfo::CancelDuel() {
 // VERIFY: 019988e7 manual
 // OFFSET: 0x005CFCD0
 int32_t Packet_SMSG_DUEL_REQUESTED(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_DuelRequested)) {
+        uint32_t wxlMsgId = msgId;
+        void* wxlMsg = msg;
+        int32_t gated = 0;
+        if (wxl::seam::Duel::Packet_SMSG_DUEL_REQUESTED::Gate(&gated, &param, &wxlMsgId, &time, &wxlMsg)) {
+            return gated;
+        }
+    }
     msg->Get(s_duelArbiter.m_guid);
     WOWGUID requester;
     msg->Get(requester.m_guid);
@@ -192,4 +210,21 @@ void CGDuelInfo::LeaveWorld() {
         ClientKillTimer(s_countdownTimer, CGDuelInfo::ProcessCountdown, "ProcessCountdown");
         s_countdownTimer = 0;
     }
+}
+
+// The answer WarcraftXL gives a challenge in the dialog's place (WarcraftXL/Binding.cpp,
+// duel_answer): the arbiter kept as SMSG_DUEL_REQUESTED's handler keeps it, then the dialog's
+// accept with the challenger as the dueler, or its cancel with the arbiter dropped, as the
+// handler does for an ignored challenger.
+void WarcraftXLAnswerDuel(WOWGUID arbiter, WOWGUID challenger, bool accept) {
+    s_duelArbiter = arbiter;
+
+    if (accept) {
+        CGDuelInfo::AcceptDuel();
+        CGDuelInfo::m_dueler = challenger;
+        return;
+    }
+
+    CGDuelInfo::CancelDuel();
+    s_duelArbiter = WOWGUID();
 }

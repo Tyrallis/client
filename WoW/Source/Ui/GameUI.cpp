@@ -2142,6 +2142,7 @@ void CGGameUI::UpdateActivePlayer() {
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_DEAD, nullptr);
         CGGameUI::ClearCursor(1, 1);
     }
+    wxl::seam::GameUI::UpdateActivePlayer::After();
 }
 
 // VERIFY: 874cc04c auto

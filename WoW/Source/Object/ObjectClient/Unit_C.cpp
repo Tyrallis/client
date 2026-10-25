@@ -771,6 +771,9 @@ int32_t ChannelSpellOrObjectChangeHandler(WOWGUID guid, uint32_t fieldOffset, ui
 // VERIFY: 1cb365b5 manual
 // OFFSET: 0x007419C0
 int32_t MountDisplayIDUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_UnitMountChanged)) {
+        wxl::seam::Unit::MountDisplayIDUpdateHandler::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {

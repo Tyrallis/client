@@ -19,6 +19,7 @@
 #include "WoW/Source/Ui/TradeSkillFrame.h"
 #include "WoW/Source/Ui/Tutorial.h"
 #include <cstddef>
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00C23540
 WOWGUID CGContainerInfo::m_containers[TOTAL_BAG_SLOTS];
@@ -263,6 +264,9 @@ static void MultiCastBarItemStatsCallback(int32_t id, const WOWGUID& guid, void*
 // VERIFY: 733aa4e0 auto
 // OFFSET: 0x005D9600
 int32_t UpdateContainerContents(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_InventorySlotChanged)) {
+        wxl::seam::Container::UpdateContainerContents::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGContainer_C* container = static_cast<CGContainer_C*>(ClntObjMgrObjectPtr(guid, TYPE_CONTAINER, __FILE__, __LINE__));
 
     if (!container) {
@@ -317,6 +321,9 @@ int32_t UpdateContainerContents(WOWGUID guid, uint32_t fieldOffset, uint32_t fie
 // VERIFY: d73cd982 manual
 // OFFSET: 0x005D9790
 int32_t UpdateInvContents(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_InventorySlotChanged)) {
+        wxl::seam::Container::UpdateInvContents::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
@@ -423,6 +430,9 @@ void CGContainerInfo::UpdateContainers() {
 // VERIFY: 4c8ee089 manual
 // OFFSET: 0x005D9B40
 int32_t InvUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
+    if (wxl::seam::Listening(WXL_EV_InventorySlotChanged)) {
+        wxl::seam::Container::InvUpdateHandler::Before(guid.m_guid, fieldOffset, fieldSize, oldValue, param);
+    }
     CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {

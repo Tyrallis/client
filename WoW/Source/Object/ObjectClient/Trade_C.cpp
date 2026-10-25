@@ -12,6 +12,7 @@
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "WoW/Source/Ui/Types.h"
 #include <cstring>
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00CA0B7C
 uint32_t s_clientStateIndex;
@@ -253,6 +254,9 @@ void Trade_C_Initialize() {
 // VERIFY: 54433403 manual
 // OFFSET: 0x007044A0
 int32_t Packet_SMSG_TRADE_STATUS(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_TradeStatus)) {
+        wxl::seam::Trade::Packet_SMSG_TRADE_STATUS::Before(param, msgId, time, msg);
+    }
     uint32_t status;
     msg->Get(status);
     int32_t reset = 0;

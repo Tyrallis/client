@@ -3335,6 +3335,9 @@ void CGChat::AddTextEmoteMessage(const WOWGUID& guid, uint32_t emote, const char
 // VERIFY: d2a42dd2 auto
 // OFFSET: 0x00504070
 int32_t CGChat::OnTextEmote(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
+    if (wxl::seam::Listening(WXL_EV_TextEmote)) {
+        wxl::seam::Chat::OnTextEmote::Before(param, msgId, time, msg);
+    }
     WOWGUID guid;
     uint32_t emote;
     uint32_t emoteNum;
