@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <vector>
 
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
+#include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/MPQGlobals.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
@@ -453,6 +455,35 @@ namespace WarcraftXL::Binding {
     wxl_bool WXL_CALL archive_mount(const char* path, int32_t priority) {
         SArchive* archive = nullptr;
         return path && SFile::OpenArchive(path, priority, 0, &archive) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    const char* WXL_CALL storage_base_path() {
+        return SFile::m_basePath;
+    }
+
+    void WXL_CALL storage_rescan() {
+        SFile::RebuildHash();
+    }
+
+    uint32_t WXL_CALL archive_list(wxl_core_name_fn fn, void* user) {
+        if (!fn) {
+            return 0;
+        }
+        // The records first: the listing opens files, which may reach the set.
+        std::vector<System_SFile::ARCHIVEREC*> records;
+        for (System_SFile::ARCHIVEREC* record : *System_MPQGlobals::GetArchiveList()) {
+            records.push_back(record);
+        }
+        uint32_t listed = 0;
+        for (System_SFile::ARCHIVEREC* record : records) {
+            SArchive archive = {};
+            archive.m_type = 0;
+            archive.m_archive = record;
+            if (record && SFile::List(&archive, fn, user)) {
+                ++listed;
+            }
+        }
+        return listed;
     }
 
     // --- Gx ---------------------------------------------------------------------------------
