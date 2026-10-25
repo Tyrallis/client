@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include "Engine/Source/Tempest/C3Vector.h"
 
 #if defined(WOWDECOMP_ARCH_64)
@@ -13,8 +14,14 @@
 // Win32 carries no runtime: every seam call compiles to nothing. Before and After are function
 // objects that take anything, so a call site reads the same on both architectures.
 #include "wxl/abi.h"
+#include "wxl/events.h"
 
 namespace wxl::seam {
+    // Nobody listens on Win32: the guarded seam calls are skipped like the others.
+    inline constexpr bool Listening(wxl_event) {
+        return false;
+    }
+
     namespace detail {
         struct Nop {
             template <class... T>
@@ -61,6 +68,16 @@ namespace WarcraftXL {
     static_assert(sizeof(C3Vector) == sizeof(wxl_vec3) && offsetof(C3Vector, x) == offsetof(wxl_vec3, x)
                       && offsetof(C3Vector, y) == offsetof(wxl_vec3, y) && offsetof(C3Vector, z) == offsetof(wxl_vec3, z),
                   "C3Vector and wxl_vec3 are the same three floats, or the seams cannot pass one as the other");
+
+    // A small client value passed by value as the dword it is, for a seam row that declares it
+    // as one (CGxTexFlags, a struct of bit fields).
+    template <class T>
+    inline uint32_t Bits(const T& value) {
+        static_assert(sizeof(T) == sizeof(uint32_t), "a dword-sized value");
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof bits);
+        return bits;
+    }
 
     // A client position as the seams take it.
     inline const wxl_vec3* Vec3(const C3Vector& v) {

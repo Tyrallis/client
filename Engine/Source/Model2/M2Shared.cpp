@@ -24,6 +24,7 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Tempest/CImVector.h"
 #include "Engine/Source/Os/OsMemory.h"
+#include "WarcraftXL/Seams.h"
 
 // STATIC: 0x00A45644
 static const uint32_t s_skinProfileBoneCounts[4] = { 256, 64, 53, 21 };
@@ -1762,6 +1763,10 @@ int32_t CM2Shared::FinishLoading() {
 // VERIFY: 77f453a0 manual
 // OFFSET: 0x0083D340
 void CM2Shared::LoadSucceededCallback(void* param) {
+    if (wxl::seam::Listening(WXL_EV_ModelLoad)) {
+        wxl::seam::M2Shared::LoadSucceededCallback::Before(param);
+    }
+
     CM2Shared* shared = static_cast<CM2Shared*>(param);
     AsyncFileReadDestroyObject(shared->m_asyncObject);
     shared->m_asyncObject = nullptr;

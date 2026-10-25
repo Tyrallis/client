@@ -920,6 +920,9 @@ static int32_t FillInPartialObjectData(CGObject_C* object, WOWGUID guid, CDataSt
     uint8_t blockCount;
 
     if (!ExtractDirtyMasks(msg, &blockCount, masks)) {
+        if (wxl::seam::Listening(WXL_EV_ObjectUpdate)) {
+            wxl::seam::ObjectMgr::FillInPartialObjectData::After(0, object, guid.m_guid, msg, skipMirrorUpdate, zeroFillAbsent);
+        }
         return 0;
     }
 
@@ -961,6 +964,10 @@ static int32_t FillInPartialObjectData(CGObject_C* object, WOWGUID guid, CDataSt
         }
 
         object->SetBlock(i, value);
+    }
+
+    if (wxl::seam::Listening(WXL_EV_ObjectUpdate)) {
+        wxl::seam::ObjectMgr::FillInPartialObjectData::After(1, object, guid.m_guid, msg, skipMirrorUpdate, zeroFillAbsent);
     }
 
     return 1;
@@ -1640,6 +1647,7 @@ int32_t Packet_SMSG_UPDATE_OBJECT(void* param, NETMESSAGE msgId, uint32_t time, 
         ExpireOldObjects(120000, static_cast<OBJECT_TYPE_ID>(typeId));
     }
 
+    wxl::seam::ObjectMgr::Packet_SMSG_UPDATE_OBJECT::After(result, param, msgId, time, msg);
     return result;
 }
 

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstring>
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
+#include "WarcraftXL/Seams.h"
 #include "Engine/Source/BLPFile/blp.h"
 #include "Engine/Source/Event/Event.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
@@ -2474,6 +2475,10 @@ CTexture* CreateTgaTexture(const char* fileName, char* extension, int32_t flags,
 // VERIFY: 8821b223 manual
 // OFFSET: 0x004B9760
 CTexture* TextureCreate(const char* fileName, CGxTexFlags texFlags, CStatus* status, uint32_t flags) {
+    if (wxl::seam::Listening(WXL_EV_TextureLoad)) {
+        wxl::seam::Texture::Create::Before(fileName, WarcraftXL::Bits(texFlags), status, flags);
+    }
+
     if (!fileName) {
         DebugValidate("fileName");
         SErrSetLastError(STORM_ERROR_INVALID_PARAMETER);

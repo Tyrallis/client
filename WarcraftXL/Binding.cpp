@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "Engine/Source/Base/CDataStore.h"
+#include "Engine/Source/Base/SIMD.h"
+#include "Engine/Source/Model2/M2Shared.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
 #include "Engine/Source/BlizzardCore/Source/Packages/Mopaq/MPQGlobals.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
@@ -47,6 +49,8 @@
 #include "WoW/Source/Ui/ChatFrame.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
+#include "WoW/Source/WorldClient/MapDoodadDef.h"
+#include "WoW/Source/WorldClient/MapObj.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "wxl/core/gpu.hpp"
 #include "wxl/events.h"
@@ -693,5 +697,63 @@ namespace WarcraftXL::Binding {
 #include "wxl/core/client_dbs.def"
 #undef WXL_CLIENT_DB
         return told;
+    }
+
+    // --- Asset: models, map objects, doodads (asset.def) -------------------------------------
+
+    const char* WXL_CALL model_path(const void* shared) {
+        return shared ? static_cast<const CM2Shared*>(shared)->m_fileName : nullptr;
+    }
+
+    const void* WXL_CALL model_bytes(const void* shared, uint32_t* size) {
+        if (!shared) {
+            return nullptr;
+        }
+        const CM2Shared* model = static_cast<const CM2Shared*>(shared);
+        if (size) {
+            *size = model->m_fileSize;
+        }
+        return model->m_data;
+    }
+
+    wxl_bool WXL_CALL model_replace_bytes(void* shared, const void* bytes, uint32_t size) {
+        if (!shared || !bytes || !size) {
+            return WXL_FALSE;
+        }
+        void* copy = SIMD::AllocA16(size, __FILE__, __LINE__);
+        if (!copy) {
+            return WXL_FALSE;
+        }
+        std::memcpy(copy, bytes, size);
+        CM2Shared* model = static_cast<CM2Shared*>(shared);
+        M2Data* read = model->m_data;
+        model->m_data = static_cast<M2Data*>(copy);
+        model->m_fileSize = size;
+        if (read) {
+            SIMD::FreeA16(read);
+        }
+        return WXL_TRUE;
+    }
+
+    const char* WXL_CALL map_obj_path(const void* map_obj) {
+        return map_obj ? static_cast<const CMapObj*>(map_obj)->m_wmoName : nullptr;
+    }
+
+    const void* WXL_CALL map_obj_bytes(const void* map_obj, uint32_t* size) {
+        if (!map_obj) {
+            return nullptr;
+        }
+        const CMapObj* root = static_cast<const CMapObj*>(map_obj);
+        if (size) {
+            *size = static_cast<uint32_t>(root->m_wmoFileSize);
+        }
+        return root->m_pWmoData;
+    }
+
+    wxl_bool WXL_CALL doodad_position(const void* def, wxl_vec3* out) {
+        if (!def || !out) {
+            return WXL_FALSE;
+        }
+        return Give(out, static_cast<const CMapDoodadDef*>(def)->m_position);
     }
 }

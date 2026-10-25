@@ -2,6 +2,7 @@
 #include "WoW/Source/WorldClient/WorldLightingConstants.h"
 #include "WoW/Source/WorldClient/WorldConstants.h"
 #include "Engine/Source/ShaderEffect/ShadowCache.h"
+#include "WarcraftXL/Seams.h"
 #if defined(_MSC_VER)
 #include <malloc.h>
 #else
@@ -2591,6 +2592,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, SMDoodadDef* doodadDe
     CMapDoodadDef* mapDoodadDef = CMap::doodadDefHash.Ptr(doodadDef->m_uniqueId, key);
 
     if (mapDoodadDef) {
+        wxl::seam::Map::CreateDoodadDef::After(mapDoodadDef, fileName, doodadDef, WarcraftXL::Vec3(*center));
         return mapDoodadDef;
     }
 
@@ -2645,6 +2647,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, SMDoodadDef* doodadDe
         mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
     }
 
+    wxl::seam::Map::CreateDoodadDef::After(mapDoodadDef, fileName, doodadDef, WarcraftXL::Vec3(*center));
     return mapDoodadDef;
 }
 
@@ -2673,6 +2676,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, const C3Vector* posit
     doodadDef->m_model = nullptr;
     CMapDoodadDef::CreateModel(fileName, doodadDef, waitForLoad, 0);
 
+    wxl::seam::Map::CreateDoodadDefAt::After(doodadDef, fileName, WarcraftXL::Vec3(*position), facing, waitForLoad);
     return doodadDef;
 }
 
@@ -2683,6 +2687,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(uint32_t doodadRef, SMODoodadDef* doodadDef
     CMapDoodadDef* mapDoodadDef = CMap::doodadDefHash.Ptr(doodadRef, hashKey);
 
     if (mapDoodadDef) {
+        wxl::seam::Map::CreateDoodadDefInMapObj::After(mapDoodadDef, doodadRef, doodadDef, name, key, mat, doodadSet);
         return mapDoodadDef;
     }
 
@@ -2728,6 +2733,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(uint32_t doodadRef, SMODoodadDef* doodadDef
         mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
     }
 
+    wxl::seam::Map::CreateDoodadDefInMapObj::After(mapDoodadDef, doodadRef, doodadDef, name, key, mat, doodadSet);
     return mapDoodadDef;
 }
 
@@ -3132,11 +3138,18 @@ CMapDoodadDef* CMap::AllocDoodadDef() {
     void* object = nullptr;
 
     if (!ObjectAlloc(*CMap::doodadDefHeap, &memHandle, &object, false)) {
+        if (wxl::seam::Listening(WXL_EV_DoodadSpawn)) {
+            wxl::seam::Map::AllocDoodadDef::After(nullptr);
+        }
         return nullptr;
     }
 
     CMapDoodadDef* doodadDef = new (object) CMapDoodadDef();
     doodadDef->m_objectIndex = memHandle;
+
+    if (wxl::seam::Listening(WXL_EV_DoodadSpawn)) {
+        wxl::seam::Map::AllocDoodadDef::After(doodadDef);
+    }
 
     return doodadDef;
 }

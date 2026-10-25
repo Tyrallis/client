@@ -1048,6 +1048,9 @@ int32_t STORMAPI SFile::OpenEx(SArchive* archive, const char* name, uint32_t fla
         Blizzard::Lock::MutexLeave(System_SFile2::s_soundCacheLock);
 
         if (opened) {
+            if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+                wxl::seam::Storage::OpenEx::After(1, archive, name, flags, wxlResult);
+            }
             return 1;
         }
 
@@ -1068,6 +1071,9 @@ int32_t STORMAPI SFile::OpenEx(SArchive* archive, const char* name, uint32_t fla
     if (!archive) {
         if (!System_SFile2::FindFile(name, path, sizeof(path), flags, &type, &handle)) {
             SErrSetLastError(2);
+            if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+                wxl::seam::Storage::OpenEx::After(0, archive, name, flags, wxlResult);
+            }
             return 0;
         }
     } else if (archive->m_type == SARCHIVE_MPQ) {
@@ -1077,6 +1083,9 @@ int32_t STORMAPI SFile::OpenEx(SArchive* archive, const char* name, uint32_t fla
         handle = archive->m_archive;
         type = SFILE_ZIP_FILE;
     } else {
+        if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+            wxl::seam::Storage::OpenEx::After(0, archive, name, flags, wxlResult);
+        }
         return 0;
     }
 
@@ -1111,11 +1120,17 @@ int32_t STORMAPI SFile::OpenEx(SArchive* archive, const char* name, uint32_t fla
         }
 
         default: {
+            if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+                wxl::seam::Storage::OpenEx::After(0, archive, name, flags, wxlResult);
+            }
             return 0;
         }
     }
 
     if (!(flags & 0x20000)) {
+        if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+            wxl::seam::Storage::OpenEx::After(opened, archive, name, flags, wxlResult);
+        }
         return opened;
     }
 
@@ -1129,6 +1144,9 @@ int32_t STORMAPI SFile::OpenEx(SArchive* archive, const char* name, uint32_t fla
     (*result)->m_type = SFILE_MEMORY;
     (*result)->m_position = 0;
 
+    if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+        wxl::seam::Storage::OpenEx::After(opened, archive, name, flags, wxlResult);
+    }
     return opened;
 
 fail:
@@ -1138,6 +1156,9 @@ fail:
 
     *result = nullptr;
 
+    if (wxl::seam::Listening(WXL_EV_FileOpened)) {
+        wxl::seam::Storage::OpenEx::After(0, archive, name, flags, wxlResult);
+    }
     return 0;
 }
 
