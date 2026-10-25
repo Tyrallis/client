@@ -130,8 +130,8 @@ class CM2Scene {
     void TransformHitTestVerticesBlendSSE(const CM2Model* model, const M2SkinProfile* skinData, const M2SkinSection* section, int32_t normals, const C3Vector& dir, float d);
 };
 
-extern const uint32_t s_blendModes[3][7];
-extern const uint32_t s_localLighting[7];
+extern const uint32_t s_blendModes[3][8];
+extern const uint32_t s_localLighting[8];
 
 uint32_t ParticleBlendToM2Blend(uint32_t blend);
 uint32_t ParticleFlagsToM2Flags(uint32_t flags);

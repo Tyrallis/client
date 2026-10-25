@@ -44,10 +44,10 @@ const D3DDECLUSAGE CGxDeviceD3d::s_gxAttribToD3dAttribUsage[GxVAs_Last] = { D3DD
 const uint32_t CGxDeviceD3d::s_gxAttribToD3dAttribUsageIndex[GxVAs_Last] = { 0, 0, 0, 0, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7 };
 
 // STATIC: 0x00A2F964
-const D3DBLEND CGxDeviceD3d::s_srcBlend[12] = { D3DBLEND_ONE, D3DBLEND_ONE, D3DBLEND_SRCALPHA, D3DBLEND_SRCALPHA, D3DBLEND_DESTCOLOR, D3DBLEND_DESTCOLOR, D3DBLEND_DESTCOLOR, D3DBLEND_INVSRCALPHA, D3DBLEND_INVSRCALPHA, D3DBLEND_SRCALPHA, D3DBLEND_ONE, D3DBLEND_BLENDFACTOR };
+const D3DBLEND CGxDeviceD3d::s_srcBlend[GxBlends_Last] = { D3DBLEND_ONE, D3DBLEND_ONE, D3DBLEND_SRCALPHA, D3DBLEND_SRCALPHA, D3DBLEND_DESTCOLOR, D3DBLEND_DESTCOLOR, D3DBLEND_DESTCOLOR, D3DBLEND_INVSRCALPHA, D3DBLEND_INVSRCALPHA, D3DBLEND_SRCALPHA, D3DBLEND_ONE, D3DBLEND_BLENDFACTOR, D3DBLEND_ONE };
 
 // STATIC: 0x00A2F994
-const D3DBLEND CGxDeviceD3d::s_dstBlend[12] = { D3DBLEND_ZERO, D3DBLEND_ZERO, D3DBLEND_INVSRCALPHA, D3DBLEND_ONE, D3DBLEND_ZERO, D3DBLEND_SRCCOLOR, D3DBLEND_ONE, D3DBLEND_ONE, D3DBLEND_ZERO, D3DBLEND_ZERO, D3DBLEND_ONE, D3DBLEND_INVBLENDFACTOR };
+const D3DBLEND CGxDeviceD3d::s_dstBlend[GxBlends_Last] = { D3DBLEND_ZERO, D3DBLEND_ZERO, D3DBLEND_INVSRCALPHA, D3DBLEND_ONE, D3DBLEND_ZERO, D3DBLEND_SRCCOLOR, D3DBLEND_ONE, D3DBLEND_ONE, D3DBLEND_ZERO, D3DBLEND_ZERO, D3DBLEND_ONE, D3DBLEND_INVBLENDFACTOR, D3DBLEND_INVSRCALPHA };
 
 // STATIC: 0x00A2F9C4
 const D3DTEXTUREADDRESS CGxDeviceD3d::s_wrapModes[2] = { D3DTADDRESS_CLAMP, D3DTADDRESS_WRAP };
@@ -2152,6 +2152,14 @@ void CGxDeviceD3d::IXformSetViewport() {
     }
 
     this->m_d3dDevice->SetViewport(&viewport);
+
+    // WarcraftXL: kept for wxl.gx (Gx.h).
+    g_gxLastIndexedDraw.viewport[0] = viewport.X;
+    g_gxLastIndexedDraw.viewport[1] = viewport.Y;
+    g_gxLastIndexedDraw.viewport[2] = viewport.Width;
+    g_gxLastIndexedDraw.viewport[3] = viewport.Height;
+    g_gxLastIndexedDraw.viewportZ[0] = viewport.MinZ;
+    g_gxLastIndexedDraw.viewportZ[1] = viewport.MaxZ;
     this->m_viewportDirty = 0;
 }
 
@@ -3299,6 +3307,15 @@ void CGxDeviceD3d::Draw(CGxBatch* batch, int32_t count) {
     if (count) {
         uint32_t primCount = this->PrimCalcCount(batch->m_primType, batch->m_count);
         this->m_d3dDevice->DrawIndexedPrimitive(s_primitiveConversion[batch->m_primType], baseVertexIndex, batch->m_minIndex, batch->m_maxIndex - batch->m_minIndex + 1, batch->m_start + (this->m_primIndexBuf->m_index >> 1), primCount);
+
+        // WarcraftXL: kept for wxl.gx (Gx.h).
+        g_gxLastIndexedDraw.primType = s_primitiveConversion[batch->m_primType];
+        g_gxLastIndexedDraw.baseVertex = static_cast<int32_t>(baseVertexIndex);
+        g_gxLastIndexedDraw.minIndex = batch->m_minIndex;
+        g_gxLastIndexedDraw.vertexCount = batch->m_maxIndex - batch->m_minIndex + 1;
+        g_gxLastIndexedDraw.startIndex = batch->m_start + (this->m_primIndexBuf->m_index >> 1);
+        g_gxLastIndexedDraw.primCount = primCount;
+        g_gxLastIndexedDraw.serial++;
     } else {
         uint32_t primCount = this->PrimCalcCount(batch->m_primType, batch->m_count);
         this->m_d3dDevice->DrawPrimitive(s_primitiveConversion[batch->m_primType], baseVertexIndex, primCount);

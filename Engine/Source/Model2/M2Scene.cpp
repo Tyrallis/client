@@ -23,10 +23,10 @@
 #include "Engine/Source/Tempest/NTempest.h"
 
 // STATIC: 0x00A45374
-const uint32_t s_localLighting[7] = { 1, 1, 1, 1, 1, 0, 0 };
+const uint32_t s_localLighting[8] = { 1, 1, 1, 1, 1, 0, 0, 1 };
 
 // STATIC: 0x00A453B0
-const uint32_t s_blendModes[3][7] = { { 0, 1, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 }, { 2, 2, 2, 10, 3, 4, 5 } };
+const uint32_t s_blendModes[3][8] = { { 0, 1, 2, 10, 3, 4, 5, 12 }, { 2, 2, 2, 10, 3, 4, 5, 12 }, { 2, 2, 2, 10, 3, 4, 5, 12 } };
 
 // STATIC: 0x00AF5898
 uint32_t CM2Scene::s_optFlags = 0xFFFFFFFF;
@@ -89,6 +89,8 @@ uint32_t ParticleBlendToM2Blend(uint32_t blend) {
             return 6;
         case 10:
             return 3;
+        case GxBlend_BlendAdd: // WarcraftXL: M2 blend mode 7
+            return 7;
         default:
             return 0;
     }
@@ -653,7 +655,7 @@ M2HitRec* CM2Scene::HitTestGeometry(const CM2Model* model, uint32_t pass, const 
             this->TransformHitTestVerticesBlend(model, skinData, section, pass, dir, d);
         }
 
-        const uint16_t* indices = &skinData->m_indices[section->m_indexStart];
+        const uint16_t* indices = &skinData->m_indices[M2SkinSectionIndexStart(*skinData, *section)];
         best = this->IntersectHitTestTriangles(indices, indices + section->m_indexCount, section->m_vertexStart, start, pass, rec, t, best);
     }
 
@@ -1464,7 +1466,8 @@ void __stdcall CM2Scene::ComputeElementShaders(M2Element* element) {
     uint32_t boneInfluences = element->m_skinSection->m_boneInfluences;
     int32_t alphaTest;
 
-    if (!material->m_blendMode) {
+    // WarcraftXL: blend add (7) adds colour where alpha is 0 too, so it is not alpha-tested
+    if (!material->m_blendMode || material->m_blendMode == 7) {
         alphaTest = 0;
     } else if (material->m_blendMode == 1) {
         alphaTest = static_cast<int32_t>(element->m_alpha * 224.0f);

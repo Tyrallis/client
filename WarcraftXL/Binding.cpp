@@ -4,12 +4,26 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <unordered_map>
+#include <vector>
 
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
+#include "Engine/Source/Gx/CGxDeviceD3d/CGxDeviceD3d.h"
+#include "Engine/Source/Gx/CGxDeviceD3d9Ex/CGxDeviceD3d9Ex.h"
 #include "Engine/Source/Gx/Gx.h"
+#include "Engine/Source/Model2/CM2SceneRender.h"
+#include "Engine/Source/Model2/M2Model.h"
+#include "Engine/Source/Model2/M2Scene.h"
+#include "Engine/Source/Model2/M2Shared.h"
+#include "Engine/Source/Base/Handle.h"
+#include "Engine/Source/Base/Status.h"
+#include "WoW/Common/ComponentCore/CharacterComponent.h"
+#include "WoW/Source/DB/DBClient/DBClient.h"
+#include "WoW/Source/DB/Rec/ChrRacesRec.h"
+#include "WoW/Source/DB/Rec/ItemDisplayInfoRec.h"
 #include "Engine/Source/Tempest/CRect.h"
 #include "Engine/Source/Tempest/C3Vector.h"
 #include "Engine/Source/lua-5.1/src/lua.h"
@@ -35,6 +49,7 @@
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/WorldClient/MapArea.h"
+#include "WoW/Source/WorldClient/Map.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "wxl/events.h"
 #include "wxl/services/script.h"
@@ -394,6 +409,691 @@ namespace WarcraftXL::Binding {
         const float h = rect.maxY - rect.minY;
         *width = w > 0.0f ? static_cast<uint32_t>(w + 0.5f) : 0u;
         *height = h > 0.0f ? static_cast<uint32_t>(h + 0.5f) : 0u;
+        return WXL_TRUE;
+    }
+
+    // --- unit.def: how one unit regards another ------------------------------------------------
+
+    int32_t WXL_CALL unit_reaction(const void* unit, const void* other) {
+        return static_cast<const CGUnit_C*>(unit)->UnitReaction(static_cast<const CGUnit_C*>(other));
+    }
+
+    // --- Gx: wxl.gx ---------------------------------------------------------------------------
+    // Both D3D9 devices keep the same copy of what they last set (m_deviceStates, the current
+    // declaration and streams); invalidating it makes the next IStateSync send everything again.
+
+    void* WXL_CALL gx_d3d9_device(void) {
+        if (!g_theGxDevicePtr) {
+            return nullptr;
+        }
+        switch (g_theGxDevicePtr->DeviceApi()) {
+            case GxApi_D3d9:
+                return static_cast<CGxDeviceD3d*>(g_theGxDevicePtr)->m_d3dDevice;
+            case GxApi_D3d9Ex:
+                return static_cast<CGxDeviceD3d9Ex*>(g_theGxDevicePtr)->m_d3dDevice;
+            default:
+                return nullptr;
+        }
+    }
+
+    template <class Device>
+    void InvalidateD3d(Device* device) {
+        device->IRsForceUpdate();
+        std::memset(device->m_deviceStates, 0xA5, sizeof device->m_deviceStates);
+        device->m_d3dCurrentVertexDecl = nullptr;
+        std::memset(device->m_d3dVertexStreamBuf, 0, sizeof device->m_d3dVertexStreamBuf);
+        device->m_viewportDirty = 1;
+        device->m_scissorRectDirty = 1;
+    }
+
+    void WXL_CALL gx_invalidate_state(void) {
+        if (!g_theGxDevicePtr) {
+            return;
+        }
+        switch (g_theGxDevicePtr->DeviceApi()) {
+            case GxApi_D3d9:
+                InvalidateD3d(static_cast<CGxDeviceD3d*>(g_theGxDevicePtr));
+                break;
+            case GxApi_D3d9Ex:
+                InvalidateD3d(static_cast<CGxDeviceD3d9Ex*>(g_theGxDevicePtr));
+                break;
+            default:
+                break;
+        }
+    }
+
+    CM2Model* RootModel(CM2Model* model) {
+        // Bounded: an attachment chain is a few links (weapon, rider, mount).
+        for (int32_t i = 0; model && model->m_attachParent && i < 16; i++) {
+            model = model->m_attachParent;
+        }
+        return model;
+    }
+
+    void* WXL_CALL gx_object_model(const void* object) {
+        return RootModel(Object(object)->m_worldModel);
+    }
+
+    wxl_bool WXL_CALL gx_model_draw(const void* render, wxl_gx_model_draw* out) {
+        // A batch the device did not draw (no context, a lost device) leaves the serial as it was.
+        static uint32_t s_reported = 0;
+        const CM2SceneRender* r = static_cast<const CM2SceneRender*>(render);
+        if (!out || !r->m_curModel || g_gxLastIndexedDraw.serial == s_reported) {
+            return WXL_FALSE;
+        }
+        s_reported = g_gxLastIndexedDraw.serial;
+        out->model = r->m_curModel;
+        out->root_model = RootModel(r->m_curModel);
+        out->primitive_type = g_gxLastIndexedDraw.primType;
+        out->base_vertex = g_gxLastIndexedDraw.baseVertex;
+        out->min_index = g_gxLastIndexedDraw.minIndex;
+        out->vertex_count = g_gxLastIndexedDraw.vertexCount;
+        out->start_index = g_gxLastIndexedDraw.startIndex;
+        out->primitive_count = g_gxLastIndexedDraw.primCount;
+        out->blend_mode = r->m_curMaterial ? r->m_curMaterial->m_blendMode : 0u;
+        out->viewport_x = g_gxLastIndexedDraw.viewport[0];
+        out->viewport_y = g_gxLastIndexedDraw.viewport[1];
+        out->viewport_width = g_gxLastIndexedDraw.viewport[2];
+        out->viewport_height = g_gxLastIndexedDraw.viewport[3];
+        out->viewport_min_z = g_gxLastIndexedDraw.viewportZ[0];
+        out->viewport_max_z = g_gxLastIndexedDraw.viewportZ[1];
+        return WXL_TRUE;
+    }
+
+    // --- M2: wxl.m2 -----------------------------------------------------------------------------
+
+    wxl_bool WXL_CALL component_wearer(const void* component, uint32_t item_slot, wxl_m2_equipment* out) {
+        if (!component || !out) {
+            return WXL_FALSE;
+        }
+        const CCharacterComponent* c = static_cast<const CCharacterComponent*>(component);
+        out->wearer = const_cast<void*>(component);
+        out->model = c->m_data.m_model;
+        out->race_id = c->m_data.m_preferences.m_raceID;
+        out->sex_id = c->m_data.m_preferences.m_sexID;
+        out->item_slot = item_slot;
+        out->display_id = item_slot < NUM_ITEM_SLOTS ? c->m_itemDisplayID[item_slot] : 0u;
+        out->npc = (c->m_data.m_flags & 0x1) ? WXL_TRUE : WXL_FALSE;
+        return WXL_TRUE;
+    }
+
+    const char* Text(const char* text) {
+        return text ? text : "";
+    }
+
+    wxl_bool WXL_CALL m2_item_display(uint32_t id, wxl_m2_item_display* out) {
+        ItemDisplayInfoRec rec;
+        if (!out || !id || !g_itemDisplayInfoDB.GetRecord(static_cast<int32_t>(id), &rec)) {
+            return WXL_FALSE;
+        }
+        out->id = static_cast<uint32_t>(rec.m_id);
+        for (int32_t i = 0; i < 2; i++) {
+            out->model[i] = Text(rec.m_modelName[i]);
+            out->model_texture[i] = Text(rec.m_modelTexture[i]);
+            out->icon[i] = Text(rec.m_inventoryIcon[i]);
+            out->helmet_geoset_vis[i] = static_cast<uint32_t>(rec.m_helmetGeosetVisID[i]);
+        }
+        for (int32_t i = 0; i < 3; i++) {
+            out->geoset_group[i] = static_cast<uint32_t>(rec.m_geosetGroup[i]);
+        }
+        for (int32_t i = 0; i < 8; i++) {
+            out->texture[i] = Text(rec.m_texture[i]);
+        }
+        out->flags = static_cast<uint32_t>(rec.m_flags);
+        out->spell_visual_id = static_cast<uint32_t>(rec.m_spellVisualID);
+        out->group_sound_index = static_cast<uint32_t>(rec.m_groupSoundIndex);
+        out->item_visual = rec.m_itemVisual;
+        out->particle_color_id = static_cast<uint32_t>(rec.m_particleColorID);
+        return WXL_TRUE;
+    }
+
+    const char* WXL_CALL m2_race_prefix(uint32_t race) {
+        const ChrRacesRec* rec = g_chrRacesDB.GetRecord(static_cast<int32_t>(race));
+        return rec ? rec->m_clientPrefix : nullptr;
+    }
+
+    // The animation each world model starts with once it has loaded (see m2_play_animation).
+    struct PendingAnim {
+        uint32_t anim;
+        float speed;
+    };
+
+    std::unordered_map<CM2Model*, PendingAnim>& PendingAnims() {
+        static std::unordered_map<CM2Model*, PendingAnim> s_pending;
+        return s_pending;
+    }
+
+    void* WXL_CALL m2_create_model(void* scene_model, const char* path) {
+        CM2Model* parent = static_cast<CM2Model*>(scene_model);
+        if (!parent || !parent->m_scene || !path || !*path) {
+            return nullptr;
+        }
+        return parent->m_scene->CreateModel(path, 0);
+    }
+
+    void WXL_CALL m2_release_model(void* model) {
+        if (model) {
+            PendingAnims().erase(static_cast<CM2Model*>(model));
+            static_cast<CM2Model*>(model)->Release();
+        }
+    }
+
+    wxl_bool WXL_CALL m2_attach_model(void* model, void* parent, uint32_t attachment, wxl_bool to_root) {
+        CM2Model* child = static_cast<CM2Model*>(model);
+        CM2Model* to = static_cast<CM2Model*>(parent);
+        if (!child || !to || child == to) {
+            return WXL_FALSE;
+        }
+        // AttachToParent drops a request for a point a loaded parent lacks without saying so.
+        if (!to_root && (to->m_fFlags & 1)) {
+            M2Data* data = to->m_shared->m_data;
+            uint32_t index = attachment < data->m_attachmentIndicesById.m_count ? data->m_attachmentIndicesById[attachment] : 0xFFFF;
+            if (index == 0xFFFF) {
+                return WXL_FALSE;
+            }
+        }
+        child->AttachToParent(to, attachment, nullptr, to_root ? 1 : 0);
+        return child->m_attachParent == to ? WXL_TRUE : WXL_FALSE;
+    }
+
+    void WXL_CALL m2_detach_model(void* model) {
+        CM2Model* child = static_cast<CM2Model*>(model);
+        if (child && child->m_attachParent) {
+            child->DetachFromParent();
+        }
+    }
+
+    void* WXL_CALL m2_model_parent(const void* model) {
+        return model ? static_cast<const CM2Model*>(model)->m_attachParent : nullptr;
+    }
+
+    void* WXL_CALL m2_model_source(const void* model) {
+        return model ? static_cast<const CM2Model*>(model)->m_model30 : nullptr;
+    }
+
+    void WXL_CALL m2_set_geosets(void* model, uint32_t first, uint32_t last, wxl_bool visible) {
+        if (model) {
+            static_cast<CM2Model*>(model)->SetGeometryVisible(first, last, visible ? 1 : 0);
+        }
+    }
+
+    wxl_bool WXL_CALL m2_replace_texture(void* model, uint32_t type, const char* path) {
+        static CStatus s_status;
+        if (!model || !path || !*path) {
+            return WXL_FALSE;
+        }
+        CTexture* texture = CreateTexture(path, &s_status);
+        if (!texture) {
+            return WXL_FALSE;
+        }
+        // The model takes a handle of its own, as CCharacterComponent::AddLink relies on.
+        static_cast<CM2Model*>(model)->ReplaceTexture(type, texture);
+        HandleClose(reinterpret_cast<HOBJECT>(texture));
+        return WXL_TRUE;
+    }
+
+    // Which parent bone each child bone takes its pose from, for one pair of model files: by key
+    // bone id first, then by name, and a bone matching neither takes its nearest matched
+    // ancestor's. Each animate thread keeps the last few pairs it built; a pair is rebuilt when
+    // either file's bone count no longer agrees, which is all a recycled file can be told by.
+    struct BoneMap {
+        const M2Data* child = nullptr;
+        const M2Data* parent = nullptr;
+        uint32_t childCount = 0;
+        uint32_t parentCount = 0;
+        bool matched = false;
+        std::vector<uint16_t> parentOf;
+    };
+
+    const BoneMap& MapBones(const M2Data* child, const M2Data* parent) {
+        thread_local BoneMap s_maps[8];
+        thread_local uint32_t s_next = 0;
+
+        const uint32_t childCount = child->m_bones.m_count;
+        const uint32_t parentCount = parent->m_bones.m_count;
+        for (const BoneMap& map : s_maps) {
+            if (map.child == child && map.parent == parent && map.childCount == childCount && map.parentCount == parentCount) {
+                return map;
+            }
+        }
+
+        BoneMap& map = s_maps[s_next++ % 8];
+        map.child = child;
+        map.parent = parent;
+        map.childCount = childCount;
+        map.parentCount = parentCount;
+        map.matched = false;
+        map.parentOf.assign(childCount, 0xFFFF);
+
+        for (uint32_t i = 0; i < childCount; i++) {
+            const M2CompBone& bone = child->m_bones[i];
+            uint16_t found = 0xFFFF;
+            const int32_t key = static_cast<int32_t>(bone.m_boneId);
+            if (key >= 0 && static_cast<uint32_t>(key) < parent->m_boneIndicesById.m_count) {
+                const uint16_t index = parent->m_boneIndicesById[static_cast<uint32_t>(key)];
+                if (index < parentCount) {
+                    found = index;
+                }
+            }
+            if (found == 0xFFFF && bone.m_boneNameCRC) {
+                for (uint32_t j = 0; j < parentCount; j++) {
+                    if (parent->m_bones[j].m_boneNameCRC == bone.m_boneNameCRC) {
+                        found = static_cast<uint16_t>(j);
+                        break;
+                    }
+                }
+            }
+            if (found != 0xFFFF) {
+                map.matched = true;
+            } else {
+                // A retail piece names leg and arm bones by key bones a 3.3.5 body lacks (thighs,
+                // knees, shins: 55-58, 70-75). The body has those bones under other ids, at the
+                // same place: take the body bone nearest this bone's pivot among the descendants of
+                // its nearest matched ancestor's counterpart (the whole body for none).
+                const uint16_t ancestor = bone.m_parentIndex < i ? map.parentOf[bone.m_parentIndex] : 0xFFFF;
+                float best = 3.4e38f;
+                for (uint32_t j = 0; j < parentCount; j++) {
+                    if (ancestor != 0xFFFF) {
+                        uint32_t walk = j;
+                        for (uint32_t depth = 0; walk != ancestor && walk < parentCount && depth < parentCount; depth++) {
+                            walk = parent->m_bones[walk].m_parentIndex;
+                        }
+                        if (walk != ancestor) {
+                            continue;
+                        }
+                    }
+                    const C3Vector& a = bone.m_pivot;
+                    const C3Vector& b = parent->m_bones[j].m_pivot;
+                    const float d = (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z);
+                    if (d < best) {
+                        best = d;
+                        found = static_cast<uint16_t>(j);
+                    }
+                }
+                if (found == 0xFFFF) {
+                    found = ancestor;
+                }
+            }
+            map.parentOf[i] = found;
+        }
+        return map;
+    }
+
+    wxl_bool WXL_CALL m2_pose_from_parent(void* model) {
+        CM2Model* child = static_cast<CM2Model*>(model);
+        CM2Model* parent = child ? child->m_attachParent : nullptr;
+        if (!parent || !(child->m_fFlags & 1) || !(parent->m_fFlags & 1) || !child->m_boneMatrices || !parent->m_boneMatrices) {
+            return WXL_FALSE;
+        }
+        const BoneMap& map = MapBones(child->m_shared->m_data, parent->m_shared->m_data);
+        if (!map.matched) {
+            return WXL_FALSE;
+        }
+        // Both are in view space: the parent's posed body is the child's, bone for bone.
+        for (uint32_t i = 0; i < map.childCount; i++) {
+            if (map.parentOf[i] != 0xFFFF) {
+                child->m_boneMatrices[i] = parent->m_boneMatrices[map.parentOf[i]];
+            }
+        }
+        return WXL_TRUE;
+    }
+
+    uint32_t WXL_CALL m2_children(const void* model, void** out, uint32_t capacity) {
+        uint32_t count = 0;
+        for (CM2Model* child = model ? static_cast<const CM2Model*>(model)->m_attachList : nullptr; child; child = child->m_attachNext) {
+            if (out && count < capacity) {
+                out[count] = child;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    wxl_bool WXL_CALL m2_attach_info(const void* model, uint32_t* attachment, wxl_bool* to_root) {
+        const CM2Model* child = static_cast<const CM2Model*>(model);
+        if (!child || !child->m_attachParent || !attachment || !to_root) {
+            return WXL_FALSE;
+        }
+        *attachment = child->m_attachmentId;
+        *to_root = (child->m_fFlags & 0x40000) ? WXL_TRUE : WXL_FALSE;
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL m2_attach_copy(void* source, void* parent, uint32_t attachment, wxl_bool to_root) {
+        CM2Model* from = static_cast<CM2Model*>(source);
+        CM2Model* to = static_cast<CM2Model*>(parent);
+        if (!from || !to || !to->m_scene) {
+            return WXL_FALSE;
+        }
+        CM2Model* copy = to->m_scene->DuplicateModel(from, 0);
+        if (!copy) {
+            return WXL_FALSE;
+        }
+        copy->AttachToParent(to, attachment, nullptr, to_root ? 1 : 0);
+        const wxl_bool attached = copy->m_attachParent == to ? WXL_TRUE : WXL_FALSE;
+        copy->Release(); // the parent holds it now, as CM2Model::Initialize leaves its copies
+        return attached;
+    }
+
+    void* WXL_CALL m2_model_file(const void* model) {
+        return model ? static_cast<const CM2Model*>(model)->m_shared : nullptr;
+    }
+
+    wxl_bool WXL_CALL m2_attachment_point(const void* model, uint32_t attachment, wxl_vec3* out) {
+        const CM2Model* m = static_cast<const CM2Model*>(model);
+        if (!m || !out || !(m->m_fFlags & 1)) {
+            return WXL_FALSE;
+        }
+        const M2Data* data = m->m_shared->m_data;
+        const uint32_t index = attachment < data->m_attachmentIndicesById.m_count ? data->m_attachmentIndicesById[attachment] : 0xFFFF;
+        if (index >= data->m_attachments.m_count) {
+            return WXL_FALSE;
+        }
+        const C3Vector& position = data->m_attachments[index].m_position;
+        out->x = position.x;
+        out->y = position.y;
+        out->z = position.z;
+        return WXL_TRUE;
+    }
+
+    uint16_t KeyBoneIndex(const CM2Model* model, uint32_t key) {
+        const M2Data* data = model->m_shared->m_data;
+        if (key >= data->m_boneIndicesById.m_count) {
+            return 0xFFFF;
+        }
+        const uint16_t index = data->m_boneIndicesById[key];
+        return index < data->m_bones.m_count ? index : 0xFFFF;
+    }
+
+    wxl_bool WXL_CALL m2_has_key_bone(const void* model, uint32_t key_bone) {
+        const CM2Model* m = static_cast<const CM2Model*>(model);
+        if (!m) {
+            return WXL_FALSE;
+        }
+        return !(m->m_fFlags & 1) || KeyBoneIndex(m, key_bone) != 0xFFFF ? WXL_TRUE : WXL_FALSE;
+    }
+
+    wxl_bool WXL_CALL m2_pose_on_bone(void* model, uint32_t key_bone, const wxl_vec3* offset) {
+        CM2Model* child = static_cast<CM2Model*>(model);
+        CM2Model* parent = child ? child->m_attachParent : nullptr;
+        if (!parent || !offset || !(child->m_fFlags & 1) || !(parent->m_fFlags & 1) || !child->m_boneMatrices || !parent->m_boneMatrices) {
+            return WXL_FALSE;
+        }
+        const uint16_t bone = KeyBoneIndex(parent, key_bone);
+        if (bone == 0xFFFF) {
+            return WXL_FALSE;
+        }
+        // What CM2Model::AnimateAttachmentsMT hands an attachment: its bone, moved to the point.
+        C44Matrix matrix = parent->m_boneMatrices[bone];
+        matrix.Translate(C3Vector(offset->x, offset->y, offset->z));
+        const uint32_t count = child->m_shared->m_data->m_bones.m_count;
+        for (uint32_t i = 0; i < count; i++) {
+            child->m_boneMatrices[i] = matrix;
+        }
+        return WXL_TRUE;
+    }
+
+    // --- M2: wxl.m2file -------------------------------------------------------------------------
+
+    wxl_bool WXL_CALL m2_file_info(const void* file, wxl_m2file* out) {
+        const CM2Shared* shared = static_cast<const CM2Shared*>(file);
+        if (!shared || !out || !shared->m_data) {
+            return WXL_FALSE;
+        }
+        out->name = shared->m_fileName;
+        out->data = shared->m_data;
+        out->size = shared->m_fileSize;
+        out->skin = shared->m_skinData;
+        return WXL_TRUE;
+    }
+
+    void WXL_CALL m2_file_set_size(void* file, uint32_t size) {
+        CM2Shared* shared = static_cast<CM2Shared*>(file);
+        if (shared && size <= shared->m_fileSize) {
+            shared->m_fileSize = size;
+        }
+    }
+
+    void WXL_CALL m2_file_animate_bones(void* file) {
+        if (CM2Shared* shared = static_cast<CM2Shared*>(file)) {
+            shared->m_billboardBoneCount++;
+        }
+    }
+
+    // --- M2: models of the world (wxl.m2's world calls) ----------------------------------------
+
+    // The map entity of each model placed in the world: what culls and draws it, as a spell
+    // effect's has. And the animation each world model starts with once it has loaded.
+    std::unordered_map<CM2Model*, CMapEntity*>& WorldEntities() {
+        static std::unordered_map<CM2Model*, CMapEntity*> s_entities;
+        return s_entities;
+    }
+
+    void PlayNow(CM2Model* model, uint32_t anim, float speed) {
+        if (!model->HasSequence(anim)) {
+            anim = 0;
+        }
+        model->SetBoneSequence(0xFFFFFFFF, anim, 0xFFFFFFFF, 0, speed, 1, 1);
+    }
+
+    void OnWorldModelLoaded(CM2Model* model, void*) {
+        auto& pending = PendingAnims();
+        auto it = pending.find(model);
+        if (it == pending.end()) {
+            PlayNow(model, 0, 1.0f);
+            return;
+        }
+        PendingAnim anim = it->second;
+        pending.erase(it);
+        PlayNow(model, anim.anim, anim.speed);
+    }
+
+    // What CGWorldFrame::SpellEffectEnumProc does for a spell effect: animate it, and show it
+    // while the map draws it.
+    int32_t WorldModelEnum(void*, uint32_t flags, uint64_t, uintptr_t param32) {
+        CM2Model* model = reinterpret_cast<CM2Model*>(param32);
+        if (!model) {
+            return 1;
+        }
+        model->SetAnimating(1);
+        if (model->IsLoaded(0, 0) && !model->m_attachParent) {
+            const uint32_t visible = flags & 1;
+            model->m_fFlags = (model->m_fFlags & ~0x8u) | (visible << 3);
+            model->m_fFlags = (model->m_fFlags & ~0x10000u) | (visible << 16);
+        }
+        return 1;
+    }
+
+    C44Matrix PlacementMatrix(const wxl_m2_placement& at) {
+        C44Matrix matrix;
+        if (at.yaw != 0.0f) {
+            matrix.RotateAroundZ(at.yaw);
+        }
+        if (at.pitch != 0.0f) {
+            matrix.RotateAroundY(at.pitch);
+        }
+        if (at.roll != 0.0f) {
+            matrix.RotateAroundX(at.roll);
+        }
+        matrix.Scale(at.scale > 0.0f ? at.scale : 1.0f);
+        matrix.d0 = at.position.x;
+        matrix.d1 = at.position.y;
+        matrix.d2 = at.position.z;
+        return matrix;
+    }
+
+    void* WXL_CALL m2_create_world_model(const char* path) {
+        if (!World::s_m2Scene || !path || !*path) {
+            return nullptr;
+        }
+        CM2Model* model = World::s_m2Scene->CreateModel(path, 0);
+        if (model) {
+            model->SetLoadedCallback(&OnWorldModelLoaded, nullptr);
+        }
+        return model;
+    }
+
+    wxl_bool WXL_CALL m2_place_world(void* model, const wxl_m2_placement* placement) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        if (!m || !placement || !World::s_m2Scene) {
+            return WXL_FALSE;
+        }
+        if (m->m_attachParent) {
+            m->DetachFromParent();
+        }
+        m->SetWorldTransform(PlacementMatrix(*placement));
+        // Its projected batches lie on the terrain whatever the projected-textures option says, as
+        // the client's own spell effects of such spells do (CEffect::PostInitialize).
+        m->m_fFlags |= 0x4;
+        C44Matrix world = m->m_worldTransform;
+        CMapEntity*& entity = WorldEntities()[m];
+        if (!entity) {
+            entity = CMap::ObjectCreateStatic(m, world, &WorldModelEnum, nullptr, reinterpret_cast<uintptr_t>(m));
+            if (!entity) {
+                WorldEntities().erase(m);
+                return WXL_FALSE;
+            }
+        }
+        CAaBox box;
+        CAaSphere sphere;
+        C3Vector light;
+        if (m->IsLoaded(0, 0)) {
+            box = m->GetBoundingBox();
+            sphere = m->GetBoundingSphere();
+            light = sphere.c;
+        }
+        light.z = 1.0f;
+        CMap::ObjectUpdate(entity, world, box, sphere, light, false, 0xFFFFFFFF);
+        return WXL_TRUE;
+    }
+
+    void WXL_CALL m2_unplace_world(void* model) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        auto& entities = WorldEntities();
+        auto it = entities.find(m);
+        if (it == entities.end()) {
+            return;
+        }
+        CMapEntity* entity = it->second;
+        entities.erase(it);
+        if (entity) {
+            World::ObjectDestroy(entity);
+        }
+        m->m_fFlags &= ~(0x8u | 0x10000u);
+    }
+
+    void WXL_CALL m2_set_transform(void* model, const wxl_m2_placement* placement) {
+        if (model && placement) {
+            static_cast<CM2Model*>(model)->SetWorldTransform(PlacementMatrix(*placement));
+        }
+    }
+
+    void WXL_CALL m2_play_animation(void* model, uint32_t anim, float speed) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        if (!m) {
+            return;
+        }
+        if (!(m->m_fFlags & 1)) {
+            PendingAnims()[m] = PendingAnim{anim, speed};
+            return;
+        }
+        PlayNow(m, anim, speed);
+    }
+
+    wxl_bool WXL_CALL m2_loaded(const void* model) {
+        return model && (static_cast<const CM2Model*>(model)->m_fFlags & 1) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    uint32_t WXL_CALL m2_animation_length(void* model, uint32_t anim) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        if (!m || !(m->m_fFlags & 1) || !m->HasSequence(anim)) {
+            return 0;
+        }
+        M2SequenceInfo info;
+        m->GetSequenceInfo(anim, 0, info);
+        return info.m_duration;
+    }
+
+    void WXL_CALL m2_set_alpha(void* model, float alpha) {
+        if (model) {
+            static_cast<CM2Model*>(model)->m_baseAlpha = alpha;
+        }
+    }
+
+    void WXL_CALL m2_set_emitting(void* model, wxl_bool emitting) {
+        if (CM2Model* m = static_cast<CM2Model*>(model)) {
+            m->SetEmittersEnabled(emitting ? 1 : 0);
+            m->SetRibbonsEnabled(emitting ? 1 : 0);
+        }
+    }
+
+    void* WXL_CALL m2_object_model(void* object) {
+        return object ? static_cast<CGObject_C*>(object)->m_worldModel : nullptr;
+    }
+
+    wxl_bool WXL_CALL m2_ground_height(const wxl_vec3* at, float up, float down, float* out_z) {
+        if (!at || !out_z || !World::s_m2Scene) {
+            return WXL_FALSE;
+        }
+        C3Vector start(at->x, at->y, at->z + up);
+        C3Vector end(at->x, at->y, at->z - down);
+        C3Vector hit(0.0f, 0.0f, 0.0f);
+        float distance = 1.0f;
+        if (!World::Intersect(start, end, &hit, &distance, 0x120111, nullptr)) {
+            return WXL_FALSE;
+        }
+        *out_z = hit.z;
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL m2_attachment_world(void* model, uint32_t attachment, wxl_vec3* out) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        if (!m || !out || !(m->m_fFlags & 1) || !m->m_scene || !m->HasAttachment(attachment)) {
+            return WXL_FALSE;
+        }
+        const C3Vector position = m->GetAttachmentPosition(attachment);
+        out->x = position.x;
+        out->y = position.y;
+        out->z = position.z;
+        return WXL_TRUE;
+    }
+
+    // --- M2: bones for wxl.m2's bone watchers (live physics) -----------------------------------
+
+    static_assert(sizeof(C44Matrix) == 16 * sizeof(float), "a bone matrix is 16 floats");
+
+    wxl_bool WXL_CALL m2_bones(void* model, wxl_m2_bones* out) {
+        CM2Model* m = static_cast<CM2Model*>(model);
+        if (!m || !out || !(m->m_fFlags & 1) || !m->m_boneMatrices || !m->m_scene || !m->m_shared || !m->m_shared->m_data) {
+            return WXL_FALSE;
+        }
+        const CM2Shared* shared = m->m_shared;
+        out->model = m;
+        out->file = m->m_shared;
+        out->path.data = shared->m_fileName;
+        out->path.size = static_cast<uint32_t>(strnlen(shared->m_fileName, sizeof shared->m_fileName));
+        out->bone_count = shared->m_data->m_bones.m_count;
+        out->matrices = reinterpret_cast<float*>(m->m_boneMatrices);
+        std::memcpy(out->model_matrix, &m->m_matrixF4, sizeof out->model_matrix);
+        std::memcpy(out->view_to_world, &m->m_scene->m_viewInv, sizeof out->view_to_world);
+        out->time_ms = m->m_scene->m_time;
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL m2_file_bone(const void* file, uint32_t index, int16_t* parent, wxl_vec3* pivot) {
+        const CM2Shared* shared = static_cast<const CM2Shared*>(file);
+        if (!shared || !shared->m_data || index >= shared->m_data->m_bones.m_count) {
+            return WXL_FALSE;
+        }
+        const M2CompBone& bone = shared->m_data->m_bones[index];
+        if (parent) {
+            *parent = static_cast<int16_t>(bone.m_parentIndex);
+        }
+        if (pivot) {
+            pivot->x = bone.m_pivot.x;
+            pivot->y = bone.m_pivot.y;
+            pivot->z = bone.m_pivot.z;
+        }
         return WXL_TRUE;
     }
 }
