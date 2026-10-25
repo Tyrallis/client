@@ -220,6 +220,24 @@ namespace WarcraftXL::Binding {
         return WXL_TRUE;
     }
 
+    wxl_bool WXL_CALL object_unwatch_type(uint32_t type, uint32_t offset, wxl_core_mirror_fn handler, void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !handler || handler != s_mirror) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrUnsetTypeMirrorHandler(static_cast<OBJECT_TYPE_ID>(type), offset, &ForwardMirror, param);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL object_unwatch_one(uint64_t guid, uint32_t type, uint32_t offset, wxl_core_mirror_fn handler,
+                                         void* param) {
+        if (type >= NUM_CLIENT_OBJECT_TYPES || !handler || handler != s_mirror || !object_by_guid(guid)) {
+            return WXL_FALSE;
+        }
+        ClntObjMgrUnsetObjMirrorHandler(WOWGUID{ guid }, static_cast<OBJECT_TYPE_ID>(type), offset, &ForwardMirror,
+                                        param);
+        return WXL_TRUE;
+    }
+
     // --- object.def -----------------------------------------------------------------------------
 
     wxl_bool WXL_CALL object_position(const void* object, wxl_vec3* out) {
