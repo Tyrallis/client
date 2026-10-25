@@ -21,12 +21,15 @@
 #include "Engine/Source/Gx/Gx.h"
 #include "Engine/Source/Tempest/CRect.h"
 #include "Engine/Source/Tempest/C3Vector.h"
+#include "Engine/Source/Os/TimeManager.h"
 #include "Engine/Source/lua-5.1/src/lua.h"
 #include "WoW/Source/Object/Container.h"
 #include "WoW/Source/Object/Corpse.h"
 #include "WoW/Source/Object/DynamicObject.h"
 #include "WoW/Source/Object/GameObject.h"
 #include "WoW/Source/Object/Item.h"
+#include "WoW/Source/Object/ItemStats.h"
+#include "WoW/Source/Object/ObjectClient/AuraData.h"
 #include "WoW/Source/Object/Object.h"
 #include "WoW/Source/Object/ObjectClient/Container_C.h"
 #include "WoW/Source/Object/ObjectClient/Corpse_C.h"
@@ -51,9 +54,9 @@
 #include "WoW/Source/Ui/LootFrame.h"
 #include "WoW/Source/Ui/ReputationInfo.h"
 #include "WoW/Source/Ui/TradeFrame.h"
-#include "WoW/Source/Object/ObjectClient/AuraData.h"
-#include "Engine/Source/Os/TimeManager.h"
 #include "WoW/Source/Ui/GameUI.h"
+#include "WoW/Source/Ui/PartyFrame.h"
+#include "WoW/Source/Ui/RaidInfo.h"
 #include "WoW/Source/WorldClient/MapArea.h"
 #include "WoW/Source/WorldClient/MapDoodadDef.h"
 #include "WoW/Source/WorldClient/MapObj.h"
@@ -864,5 +867,137 @@ namespace WarcraftXL::Binding {
 
     void WXL_CALL duel_answer(uint64_t arbiter, uint64_t challenger, wxl_bool accept) {
         WarcraftXLAnswerDuel(WOWGUID{ arbiter }, WOWGUID{ challenger }, accept != WXL_FALSE);
+    }
+
+    // --- unit.def, item.def: what the client works out of an object ----------------------------
+
+    wxl_bool WXL_CALL unit_speed(const void* object, uint32_t index, float* out) {
+        const CGUnit_C* unit = static_cast<const CGUnit_C*>(Object(object));
+        const CMovementShared* movement = unit ? unit->m_movement : nullptr;
+        if (!movement || !out) {
+            return WXL_FALSE;
+        }
+        const float speeds[] = { movement->m_walkSpeed,   movement->m_runSpeed,       movement->m_runBackSpeed,
+                                 movement->m_swimSpeed,   movement->m_swimBackSpeed,  movement->m_flightSpeed,
+                                 movement->m_flightBackSpeed, movement->m_turnRate, movement->m_pitchRate };
+        if (index >= Extent(speeds)) {
+            return WXL_FALSE;
+        }
+        *out = speeds[index];
+        return WXL_TRUE;
+    }
+
+    int32_t WXL_CALL unit_reaction(const void* object, const void* other) {
+        if (!object || !other) {
+            return -1;
+        }
+        return static_cast<int32_t>(static_cast<const CGUnit_C*>(Object(object))
+                                        ->UnitReaction(static_cast<const CGUnit_C*>(Object(other))));
+    }
+
+    int32_t WXL_CALL unit_creature_type(const void* object) {
+        return object ? static_cast<const CGUnit_C*>(Object(object))->GetCreatureType() : 0;
+    }
+
+    uint32_t WXL_CALL unit_creature_family(const void* object) {
+        return object ? static_cast<const CGUnit_C*>(Object(object))->GetCreatureFamily() : 0;
+    }
+
+    uint32_t WXL_CALL unit_classification(const void* object) {
+        return object ? static_cast<const CGUnit_C*>(Object(object))->GetCreatureClassification() : 0;
+    }
+
+    wxl_bool WXL_CALL unit_knows_spell(const void* object, uint32_t spell) {
+        if (!object) {
+            return WXL_FALSE;
+        }
+        CGUnit_C* unit = const_cast<CGUnit_C*>(static_cast<const CGUnit_C*>(Object(object)));
+        return unit->IsSpellKnown(static_cast<int32_t>(spell)) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    uint32_t WXL_CALL unit_aura_count(const void* object) {
+        return object ? static_cast<const CGUnit_C*>(Object(object))->GetAuraCount() : 0;
+    }
+
+    const void* WXL_CALL unit_aura_at(const void* object, uint32_t index) {
+        if (!object) {
+            return nullptr;
+        }
+        return const_cast<CGUnit_C*>(static_cast<const CGUnit_C*>(Object(object)))->GetAura(index);
+    }
+
+    const void* WXL_CALL item_stats(const void* object) {
+        return object ? static_cast<const CGItem_C*>(Object(object))->GetStats() : nullptr;
+    }
+
+    // --- action.def -----------------------------------------------------------------------------
+
+    uint64_t WXL_CALL party_member_guid(uint32_t index) {
+        return index < Extent(CGPartyInfo::m_members) ? CGPartyInfo::m_members[index].m_guid : 0;
+    }
+
+    uint32_t WXL_CALL raid_member_count(void) {
+        return CGRaidInfo::m_numMembers;
+    }
+
+    uint64_t WXL_CALL raid_member_guid(uint32_t index) {
+        if (index >= Extent(CGRaidInfo::m_members) || !CGRaidInfo::m_members[index]) {
+            return 0;
+        }
+        return CGRaidInfo::m_members[index]->m_guid.m_guid;
+    }
+
+    wxl_bool WXL_CALL action_target(uint64_t guid) {
+        CGGameUI::Target(WOWGUID{ guid });
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL action_interact(uint64_t guid) {
+        return CGGameUI::OnSpriteRightClick(WOWGUID{ guid }) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    wxl_bool WXL_CALL action_cast_spell(uint32_t spell, uint64_t target) {
+        return Spell_C::CastSpell(static_cast<int32_t>(spell), nullptr, WOWGUID{ target }, false) ? WXL_TRUE
+                                                                                                    : WXL_FALSE;
+    }
+
+    wxl_bool WXL_CALL action_stop_casting(void) {
+        // Script_SpellStopCasting: the cast in progress, else the repeating spell.
+        if (Spell_C_IsActivePlayerCasting()) {
+            Spell_C_StopCasting();
+            return WXL_TRUE;
+        }
+        if (!Spell_C_GetAutoRepeatingSpell()) {
+            return WXL_FALSE;
+        }
+        Spell_C_CancelAutoRepeat(true);
+        return WXL_TRUE;
+    }
+
+    wxl_bool WXL_CALL action_use_item(const void* item, uint64_t target) {
+        if (!item) {
+            return WXL_FALSE;
+        }
+        WOWGUID on{ target };
+        CGItem_C* used = const_cast<CGItem_C*>(static_cast<const CGItem_C*>(Object(item)));
+        return used->UseItem(&on, 0) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    wxl_bool WXL_CALL action_follow(const void* mover, uint64_t guid) {
+        if (!mover) {
+            return WXL_FALSE;
+        }
+        CGUnit_C* unit = const_cast<CGUnit_C*>(static_cast<const CGUnit_C*>(Object(mover)));
+        return unit->SetTrackingTarget(WOWGUID{ guid }, TRACKTYPE_FOLLOW) ? WXL_TRUE : WXL_FALSE;
+    }
+
+    wxl_bool WXL_CALL action_move_to(const void* player, wxl_vec3 point) {
+        if (!player) {
+            return WXL_FALSE;
+        }
+        CGPlayer_C* mover = const_cast<CGPlayer_C*>(static_cast<const CGPlayer_C*>(Object(player)));
+        const WOWGUID none{};
+        const C3Vector where{ point.x, point.y, point.z };
+        return mover->ClickToMove(TRACKTYPE_MOVE, &none, &where, 0.0f) ? WXL_TRUE : WXL_FALSE;
     }
 }
