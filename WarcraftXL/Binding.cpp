@@ -197,7 +197,7 @@ namespace WarcraftXL::Binding {
     }
 
     const void* WXL_CALL object_by_guid(uint64_t guid) {
-        return ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        return ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPE_OBJECT, __FILE__, __LINE__);
     }
 
     wxl_bool WXL_CALL object_watch_type(uint32_t type, uint32_t offset, uint32_t size, wxl_core_mirror_fn handler,
@@ -495,7 +495,7 @@ namespace WarcraftXL::Binding {
         uint32_t listed = 0;
         for (System_SFile::ARCHIVEREC* record : records) {
             SArchive archive = {};
-            archive.m_type = 0;
+            archive.m_type = SARCHIVE_MPQ;
             archive.m_archive = record;
             if (record && SFile::List(&archive, fn, user)) {
                 ++listed;

@@ -51,7 +51,7 @@ static int32_t Script_SendChatMessage(lua_State* L) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -329,7 +329,7 @@ static int32_t Script_ClearChannelWatch(lua_State* L) {
 // VERIFY: 5a0c8fb3 manual
 // OFFSET: 0x00500910
 static int32_t Script_GetDefaultLanguage(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -646,7 +646,7 @@ static int32_t Script_GetChatWindowSavedPosition(lua_State* L) {
 // VERIFY: 230dd44d manual
 // OFFSET: 0x00500760
 static int32_t Script_GetNumLanguages(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -676,7 +676,7 @@ static int32_t Script_GetLanguageByIndex(lua_State* L) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -867,7 +867,7 @@ static int32_t Script_SendAddonMessage(lua_State* L) {
     if (wxl::seam::Chat::Script_SendAddonMessage::Gate(&gated, &wxlState)) {
         return gated;
     }
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }
 
@@ -1968,7 +1968,7 @@ static int32_t Script_DoEmote(lua_State* L) {
     const char* token = lua_tolstring(L, 2, nullptr);
 
     if (token && *token && *token != '%') {
-        target = CGGameUI::ClosestObjectMatch(token, TYPEMASK_PLAYER, 0, 0, 3.4028235e38f, 0);
+        target = CGGameUI::ClosestObjectMatch(token, TYPE_PLAYER, 0, 0, 3.4028235e38f, 0);
     }
 
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
