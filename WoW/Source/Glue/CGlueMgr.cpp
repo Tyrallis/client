@@ -1083,6 +1083,86 @@ void CGlueMgr::Initialize() {
     AccountDataInitializeBasicSystem();
 }
 
+// WXL: when the authserver is up but the worldserver isn't, keep the status dialog up and retry
+// instead of dropping to the realm list. AzerothCore's worldserver flags its realmlist row 0x01
+// (version mismatch) while it loads, clears it once the world port opens, and sets 0x02 (offline)
+// when it stops. The authserver re-reads the row every RealmsStateUpdateDelay (20 s by default).
+static const uint32_t WORLD_WAIT_POLL_MS = 2000;
+static int32_t s_worldWaitActive;
+static uint32_t s_worldWaitLastPoll;
+static const char* s_worldWaitText;
+
+static REALM_INFO* FindSelectedRealm() {
+    LoginResponse* response = ClientServices::CreateLoginResponse();
+    const char* realmName = ClientServices::GetSelectedRealmName();
+
+    // the realmName CVar can be cleared (realm list cancel) while the connect still targets a realm
+    if ((!realmName || !*realmName) && ClientServices::GetSelectedRealm()) {
+        realmName = ClientServices::GetSelectedRealm()->m_realmName;
+    }
+
+    if (!response || !realmName || !*realmName) {
+        return nullptr;
+    }
+
+    for (uint32_t i = 0; i < response->m_realmList.m_count; i++) {
+        REALM_INFO* realm = &response->m_realmList.m_data[i];
+
+        if (!SStrCmpUTF8I(realm->m_realmName, realmName, STORM_MAX_STR)) {
+            return realm;
+        }
+    }
+
+    return nullptr;
+}
+
+static void WorldWaitShow(REALM_INFO* realm) {
+    const char* text = realm && (realm->m_flags & 0x1) ? "Worldserver is starting" : "Worldserver Down";
+    s_worldWaitActive = 1;
+
+    if (text != s_worldWaitText) {
+        s_worldWaitText = text;
+        FrameScript_SignalEvent(GLUE_EVENT_OPEN_STATUS_DIALOG, "%s%s", "CANCEL", text);
+    }
+}
+
+static void WorldWaitEnd() {
+    s_worldWaitActive = 0;
+    s_worldWaitText = nullptr;
+}
+
+// After a failed world connect: true when we keep waiting instead of falling back to the realm list.
+static bool WorldWaitBegin() {
+    REALM_INFO* realm = FindSelectedRealm();
+
+    // No saved realm (first login) keeps the stock realm list. Once waiting, a realm missing from
+    // the list (AzerothCore hides flag 0x03, a worldserver stopped mid-load) still counts as down.
+    if (!realm && !s_worldWaitActive) {
+        return false;
+    }
+
+    WorldWaitShow(realm);
+    CGlueMgr::m_idleState = IDLE_WORLDSERVER_WAIT;
+    CGlueMgr::m_showedDisconnect = 0;
+    s_worldWaitLastPoll = OsGetAsyncTimeMs();
+
+    return true;
+}
+
+static void WorldWaitRetry() {
+    s_worldWaitLastPoll = OsGetAsyncTimeMs();
+
+    // The realm can still read "loading" for up to 20 s after the world port opens, so try the
+    // port even then (a refused local connect fails in about 2 s).
+    if (FindSelectedRealm()) {
+        ClientServices::SetSelectedRealmInfo(1);
+    }
+
+    CGlueMgr::m_idleState = IDLE_ACCOUNT_LOGIN;
+    CGlueMgr::m_showedDisconnect = 0;
+    ClientServices::Connection()->Connect();
+}
+
 // VERIFY: 5e7db3b8 manual
 // OFFSET: 0x004DAB40
 int32_t CGlueMgr::Idle(const void* data, void* param) {
@@ -1269,6 +1349,14 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
         idleState = CGlueMgr::m_idleState;
     }
 
+    if (idleState == IDLE_WORLDSERVER_WAIT) {
+        if (complete && OsGetAsyncTimeMs() - s_worldWaitLastPoll >= WORLD_WAIT_POLL_MS) {
+            WorldWaitRetry();
+        }
+
+        return 1;
+    }
+
     if (idleState == IDLE_ACCOUNT_LOGIN) {
         if (ClientServices::LoginConnection()->GetLoginServerType() == 1 && CGlueMgr::m_loginState == LOGIN_STATE_FAILED) {
             CGlueMgr::DisplayLoginStatus();
@@ -1276,6 +1364,11 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
             ClientServices::LoginConnection()->Logoff();
             CGlueMgr::m_idleState = IDLE_NONE;
             CGlueMgr::m_showedDisconnect = 0;
+            return 1;
+        }
+
+        // Catch a failed world connect before the stock code below puts its error text in the dialog.
+        if (complete && !result && op == COP_CONNECT && (errorCode == RESPONSE_FAILED_TO_CONNECT || errorCode == REALM_LIST_REALM_NOT_FOUND) && WorldWaitBegin()) {
             return 1;
         }
 
@@ -1339,12 +1432,27 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
                 CGlueMgr::m_displayingQueueDialog = 0;
             }
 
-            FrameScript_SignalEvent(GLUE_EVENT_UPDATE_STATUS_DIALOG, "%s", statusText);
+            // while waiting for the worldserver, the dialog keeps the wait text
+            if (!s_worldWaitActive) {
+                FrameScript_SignalEvent(GLUE_EVENT_UPDATE_STATUS_DIALOG, "%s", statusText);
+            }
+
+            // The world connect is pending with an empty status text, which leaves "Success!" up.
+            // If the fresh realm list already says the worldserver is down, say so now.
+            if (!complete && op == COP_CONNECT && connection->m_realmConnectPending) {
+                REALM_INFO* realm = FindSelectedRealm();
+
+                if (realm && (realm->m_flags & 0x2)) {
+                    WorldWaitShow(realm);
+                }
+            }
         }
 
         if (!complete) {
             return 1;
         }
+
+        WorldWaitEnd();
 
         if (!result) {
             if (errorCode != RESPONSE_CANCELLED) {
@@ -2216,6 +2324,15 @@ void CGlueMgr::StatusDialogClick() {
             CGlueMgr::m_idleState = IDLE_NONE;
             CGlueMgr::m_showedDisconnect = 0;
             CGlueMgr::GetCharacterList();
+            break;
+
+        case IDLE_WORLDSERVER_WAIT:
+            // stop waiting for the worldserver and show the realm list, as a failed connect did
+            WorldWaitEnd();
+            CGlueMgr::m_idleState = IDLE_NONE;
+            CGlueMgr::m_showedDisconnect = 0;
+            FrameScript_SignalEvent(GLUE_EVENT_CLOSE_STATUS_DIALOG, nullptr);
+            CRealmList::UpdateList();
             break;
 
         case IDLE_12:
